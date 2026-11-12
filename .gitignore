@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# Dados reais (documentos da instituição) NÃO vão para o GitHub
+data/documents/*
+data/database/*
+data/embeddings/*
+data/backups/*
+data/logs/
+!data/*/.gitkeep

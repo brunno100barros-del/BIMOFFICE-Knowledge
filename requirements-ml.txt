@@ -1,0 +1,2 @@
+# Etapa 2 (pesquisa semântica local) — baixa o modelo na primeira execução (~1 GB)
+sentence-transformers>=3.0

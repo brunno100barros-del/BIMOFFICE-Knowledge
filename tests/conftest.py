@@ -1,0 +1,47 @@
+import sys
+from pathlib import Path
+
+import pytest
+from docx import Document
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from backend import config  # noqa: E402
+from backend.database.db import init_db  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolated_data(tmp_path, monkeypatch):
+    """Cada teste usa uma pasta de dados temporária (nunca toca em dados reais)."""
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DOCUMENTS_DIR", tmp_path / "documents")
+    monkeypatch.setattr(config, "DATABASE_DIR", tmp_path / "database")
+    monkeypatch.setattr(config, "EMBEDDINGS_DIR", tmp_path / "embeddings")
+    monkeypatch.setattr(config, "BACKUPS_DIR", tmp_path / "backups")
+    monkeypatch.setattr(config, "LOGS_DIR", tmp_path / "logs")
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "database" / "t.db")
+    config.ensure_dirs()
+    init_db()
+
+
+def make_docx(path: Path, styled: bool = True) -> Path:
+    d = Document()
+    if styled:
+        d.add_heading("MEMORIAL DESCRITIVO – REFORMA UNIDADE SENAI", level=1)
+        d.add_heading("Revestimentos", level=2)
+        d.add_paragraph("Será executado revestimento cerâmico nas paredes dos sanitários.")
+        d.add_paragraph("As placas terão dimensão mínima de 30x60 cm, assentadas com argamassa AC-II.")
+        d.add_heading("Pintura", level=2)
+        d.add_paragraph("As paredes internas receberão tinta acrílica fosca em duas demãos.")
+        t = d.add_table(rows=2, cols=2)
+        t.cell(0, 0).text, t.cell(0, 1).text = "Item", "Especificação"
+        t.cell(1, 0).text, t.cell(1, 1).text = "Tinta", "Acrílica premium"
+    else:  # títulos "digitados à mão", sem estilos
+        d.add_paragraph("1 DISPOSIÇÕES GERAIS")
+        d.add_paragraph("Este memorial descreve os serviços de reforma da unidade.")
+        d.add_paragraph("1.1 Normas Técnicas")
+        d.add_paragraph("Todos os serviços seguirão as normas da ABNT vigentes.")
+        d.add_paragraph("2 COBERTURA")
+        d.add_paragraph("A cobertura será em telha metálica trapezoidal com isolamento termoacústico.")
+    d.save(path)
+    return path
