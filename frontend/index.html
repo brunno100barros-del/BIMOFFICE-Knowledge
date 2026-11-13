@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BIMOFFICE Knowledge</title>
+<meta name="description" content="Biblioteca inteligente de memoriais descritivos — SENAI/RO · Setor BIM Office">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<script>
+  // aplica o tema antes de desenhar a página (evita "piscar")
+  (function () {
+    try {
+      var t = localStorage.getItem("bimoffice-theme") || "system";
+      var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) { document.documentElement.dataset.theme = "light"; }
+  })();
+</script>
+<link rel="stylesheet" href="assets/app.css">
+<script src="config.js"></script>
+</head>
+<body>
+<div class="bg" aria-hidden="true">
+  <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span><span class="blob b4"></span>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5zM4 21.5A2.5 2.5 0 0 0 6.5 22H20M8 7h8M8 11h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4 4 0 0 1-.5 9.5z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4 10 14M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <aside class="sidebar glass" id="sidebar">
+    <a class="brand" href="#/dashboard" aria-label="BIMOFFICE Knowledge — início">
+      <img src="assets/logo.svg" alt="" width="40" height="40">
+      <span><strong>BIMOFFICE</strong><small>Knowledge</small></span>
+    </a>
+    <nav class="nav" aria-label="Menu principal">
+      <a href="#/dashboard" data-route="dashboard"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
+      <a href="#/biblioteca" data-route="biblioteca"><svg><use href="#i-book"/></svg><span>Biblioteca de memoriais</span></a>
+      <a href="#/pesquisa" data-route="pesquisa"><svg><use href="#i-search"/></svg><span>Pesquisa semântica</span></a>
+      <a href="#/drive" data-route="drive"><svg><use href="#i-cloud"/></svg><span>Google Drive</span></a>
+      <a href="#/config" data-route="config"><svg><use href="#i-gear"/></svg><span>Configurações</span></a>
+    </nav>
+    <div class="side-foot">
+      <a class="conn" id="conn" href="#/config" title="Situação da conexão com o backend">
+        <span class="dot"></span><span class="conn-text">Verificando…</span>
+      </a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Alternar tema claro/escuro">
+        <svg class="ic-sun"><use href="#i-sun"/></svg><svg class="ic-moon"><use href="#i-moon"/></svg>
+        <span id="themeLabel">Tema</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main" id="main" tabindex="-1">
+    <div id="banner"></div>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<div class="modal" id="importModal" hidden>
+  <div class="modal-card glass-strong" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <header class="modal-head">
+      <h2 id="importTitle">Importar documentos</h2>
+      <button class="icon-btn" data-close aria-label="Fechar"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" accept=".docx,.pdf" multiple>
+      <svg><use href="#i-upload"/></svg>
+      <strong>Arraste arquivos DOCX ou PDF aqui</strong>
+      <span>ou clique para escolher — vários de uma vez</span>
+    </label>
+    <details class="meta-box">
+      <summary>Dados aplicados a todos os arquivos (opcional)</summary>
+      <div class="form-grid">
+        <label>Unidade<input id="mUnit" placeholder="ex.: SENAI Porto Velho"></label>
+        <label>Obra<input id="mProject" placeholder="ex.: Reforma Bloco A"></label>
+        <label>Disciplina<input id="mDisc" placeholder="ex.: Arquitetura"></label>
+        <label>Palavras-chave<input id="mTags" placeholder="separadas por vírgula"></label>
+      </div>
+    </details>
+    <ul class="up-list" id="upList"></ul>
+    <footer class="modal-foot">
+      <span class="muted" id="upSummary"></span>
+      <button class="btn" data-close>Fechar</button>
+      <button class="btn primary" id="upStart" disabled><svg><use href="#i-upload"/></svg>Importar</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts" aria-live="polite"></div>
+<script src="assets/app.js"></script>
+</body>
+</html>

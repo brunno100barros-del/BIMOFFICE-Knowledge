@@ -149,3 +149,13 @@ def test_cors_allows_github_pages_and_private_network(client):
     assert r.headers["access-control-allow-private-network"] == "true"
     r = client.get("/api/health", headers={"Origin": "https://site-estranho.example"})
     assert "access-control-allow-origin" not in r.headers
+
+
+def test_frontend_is_served_and_has_no_secrets(client):
+    r = client.get("/")
+    assert r.status_code == 200 and "BIMOFFICE Knowledge" in r.text
+    for f in ("/assets/app.js", "/assets/app.css", "/config.js", "/assets/logo.svg"):
+        assert client.get(f).status_code == 200, f
+    cfg = client.get("/config.js").text
+    assert "apiBase: null" in cfg  # nenhum endereço/segredo fixo no arquivo público
+    assert client.get("/api/health").json()["status"] == "ok"  # API continua acima da interface
