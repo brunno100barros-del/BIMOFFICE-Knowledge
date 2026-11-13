@@ -33,8 +33,10 @@ antes de cada commit; commits pequenos e em português.
 - **Etapa 1 CONCLUÍDA e testada (19 testes):** estrutura, SQLite+FTS5, importação DOCX (validação, hash, duplicados),
   parser de seções/tabelas, chunker, biblioteca (filtros, metadados, lixeira, restauração, reindexação, backup),
   busca textual FTS5, rotas FastAPI `/api/library/*`.
-- **Não verificado ainda:** a camada HTTP (FastAPI) nunca foi executada — foi escrita num ambiente sem FastAPI.
-  Primeira tarefa: instalar `requirements.txt`, subir `uvicorn backend.main:app`, testar rotas (inclusive com `httpx`/TestClient e memoriais reais do usuário) e corrigir o que falhar.
+- **Camada HTTP verificada:** `uvicorn backend.main:app` sobe, `/docs` abre, todas as rotas
+  `/api/library/*` testadas com TestClient (`tests/test_api.py`) e com servidor real (curl).
+  PATCH de metadados agora valida o corpo (`DocumentUpdate`; erro 422 em vez de 500).
+- **Pendente:** testar com memoriais DOCX reais do usuário (só foram usados DOCX gerados nos testes).
 
 ## Etapas restantes
 2. Embeddings locais + indexação vetorial + pesquisa híbrida (`backend/semantic_search/`), botão/rota de reindexação, medir qualidade com exemplos reais em português (ex.: "revestimento cerâmico nas paredes dos sanitários" ≈ "paredes dos banheiros com placas cerâmicas").

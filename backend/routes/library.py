@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from backend import config
-from backend.schemas.document import ChunkOut, DocumentOut, SectionOut, TextHit
+from backend.schemas.document import ChunkOut, DocumentOut, DocumentUpdate, SectionOut, TextHit
 from backend.services import library_service as svc
 
 router = APIRouter(prefix="/api/library", tags=["biblioteca"])
@@ -59,9 +59,9 @@ def get_document(doc_id: int):
 
 
 @router.patch("/documents/{doc_id}", response_model=DocumentOut)
-def update_document(doc_id: int, meta: dict):
+def update_document(doc_id: int, meta: DocumentUpdate):
     try:
-        return svc.update_metadata(doc_id, meta)
+        return svc.update_metadata(doc_id, meta.model_dump(exclude_unset=True))
     except svc.LibraryError as e:
         raise _http(e)
 

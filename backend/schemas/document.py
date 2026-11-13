@@ -48,3 +48,16 @@ class TextHit(BaseModel):
     discipline: str
     section_path: str
     snippet: str
+
+
+class DocumentUpdate(BaseModel):
+    """Campos editáveis dos metadados (todos opcionais). Hash, arquivo e id não são editáveis."""
+    model_config = {"extra": "forbid"}
+
+    title: str | None = None
+    unit: str | None = None
+    project: str | None = None
+    discipline: str | None = None
+    doc_date: str | None = None
+    description: str | None = None
+    tags: str | list[str] | None = Field(None, description="Lista ou texto separado por vírgula")
