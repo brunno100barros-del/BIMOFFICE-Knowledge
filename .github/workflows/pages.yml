@@ -1,0 +1,50 @@
+# Publica a interface (pasta frontend/) no GitHub Pages a cada atualização da main.
+# Antes de publicar, roda os testes automáticos do backend: se falharem, nada é publicado.
+# O GitHub Pages hospeda SOMENTE a interface estática; o backend FastAPI roda à parte.
+name: Testes e publicação no GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Instalar dependências (sem o modelo de IA, que é pesado)
+        run: pip install -r requirements.txt
+      - name: Rodar testes
+        run: python -m pytest -q
+
+  publicar:
+    needs: testes
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Conferir que a interface não contém segredos
+        run: |
+          ! grep -RniE "(client_secret|api[_-]?key|BIMOFFICE_API_TOKEN *=|ghp_[A-Za-z0-9]{20})" frontend/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend
+      - id: deploy
+        uses: actions/deploy-pages@v4

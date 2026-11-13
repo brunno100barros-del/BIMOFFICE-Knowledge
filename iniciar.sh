@@ -9,5 +9,5 @@ pip install -q -r requirements.txt
 python -c "import torch" 2>/dev/null || pip install -q torch --index-url https://download.pytorch.org/whl/cpu \
   || echo "AVISO: PyTorch não instalado; pesquisa semântica indisponível."
 pip install -q -r requirements-ml.txt || echo "AVISO: sentence-transformers não instalado."
-echo "Abra no navegador: http://127.0.0.1:8000/docs"
+echo "Abra no navegador: http://127.0.0.1:8000/"
 uvicorn backend.main:app --host 127.0.0.1 --port 8000

@@ -29,28 +29,31 @@ Uma etapa por vez, testando antes de avançar. Ao fim de cada etapa informar: o 
 implementado, arquivos criados/modificados, como testar, limitações. Rodar `python -m pytest -q`
 antes de cada commit; commits pequenos e em português.
 
-## Estado atual
-- **Etapa 1 CONCLUÍDA e verificada:** biblioteca, importação DOCX, parser, chunker, FTS5, rotas
-  `/api/library/*` testadas com TestClient (`tests/test_api.py`) e com servidor real (curl).
-  Corrigido: PATCH valida o corpo (422); trechos só com título não viram trechos.
-- **Etapa 2 CONCLUÍDA (mecânica e qualidade com frases de teste):** `backend/semantic_search/`
-  (`providers.py` EmbeddingProvider + SentenceTransformerProvider E5 local-first offline;
-  `vector_store.py` BLOB float32 + numpy; `hybrid.py` RRF k=60, FTS em modo OR sem stopwords,
-  filtros unidade/disciplina/obra, aviso explícito se o modelo faltar), rotas `/api/search*`.
-  Testes: provedor falso só para mecânica (`tests/conftest.py`); modelo real em
-  `tests/test_semantic_real.py` (pulado se o modelo não estiver baixado). Benchmark: 8/10 top-1.
-- **Pendente:** validar parser e pesquisa com memoriais DOCX REAIS do usuário (pasta `amostras/`,
-  fora do Git; scripts `scripts/inspecionar_amostras.py` e `scripts/avaliar_pesquisa.py`).
-  Não há interface gráfica ainda (botão de reindexação = rota `POST /api/search/reindex` no `/docs`).
-- Ambiente na nuvem: PyTorch só-CPU via download.pytorch.org; modelo em `data/embeddings/modelos`.
-- **Aguardar confirmação do usuário antes de iniciar a Etapa 3.**
+## Estado atual (v0.3)
+- Backup antes da evolução: branch `backup/pre-evolucao-2026-11-13` (e `backup/main-2026-11-13`, mais antigo).
+- **Biblioteca + pesquisa** (Etapas 1–2 originais) CONCLUÍDAS e verificadas; 55 testes (3 usam o modelo real).
+- **PDF**: `pdf_parser.py` (pypdf, BSD) gera o mesmo ParsedDocument do DOCX; página real em `Block.page`;
+  PDF sem texto → `PdfWithoutText` → 400 com aviso; sem OCR (interface `OcrProvider` reservada).
+- **Banco**: migração automática em `db._migrate` (colunas `file_type`, `source`, `source_ref`).
+- **API nova**: `/api/library/stats`, `/api/config`, original com `?inline=true`, filtro `file_type`;
+  CORS (`BIMOFFICE_CORS_ORIGINS`, inclui GitHub Pages; `allow_private_network`); senha opcional
+  `BIMOFFICE_API_TOKEN` (Bearer; públicos: /api/health e /api/config).
+- **Interface** `frontend/` (HTML/CSS/JS puro, sem dependências externas): servida pelo backend em `/`;
+  hash-router; modo demonstração honesto sem backend; testada ponta a ponta com Playwright
+  (importação múltipla DOCX+PDF, erros individuais, duplicado, filtros, documento, pesquisa E5,
+  copiar com origem, excluir/restaurar, temas, celular, frontend separado via CORS).
+- **GitHub Pages**: `.github/workflows/pages.yml` (testes → checagem de segredos → publica `frontend/`).
+  Requer o usuário ativar Settings → Pages → Source: GitHub Actions; workflow só roda na `main`.
+- **Documentação**: `docs/PUBLICACAO.md` (arquitetura, Pages, backend online, Drive).
+- **Pendente / depende do usuário**: memoriais reais em `amostras/`; credenciais OAuth do Google (Drive);
+  escolha do servidor do backend online.
 
-## Etapas restantes
-3. Pesquisa contextual: importar memorial em elaboração, pesquisar documento inteiro ou por seção, agrupar resultados por assunto/disciplina.
-4. Memorial em elaboração + editor (títulos, seções, reordenar, editar, remover) + rastreio de fonte (original × adaptado).
-5. Exportação DOCX (python-docx; título/nome configuráveis; sem dados internos de pesquisa; avisar limites de formatação).
-6. Interface Liquid Glass (iOS/macOS): menu lateral (Dashboard, Biblioteca, Pesquisa inteligente, Memorial em elaboração, Configurações), tema claro/escuro persistente, bolhas/gradientes discretos, paleta grafite/azul profundo/ciano-violeta; vidro só na navegação, **conteúdo e editor com leitura limpa e contraste alto**; sem remover funcionalidade por causa de efeito.
-7. Backup, logs, autenticação preparada (futuro servidor interno do SENAI), scripts de instalação com um clique.
+## Etapas restantes (ordem pedida pelo usuário em 2026-11)
+5. Google Drive: OAuth 2.0 (drive.readonly), escolher pasta, listar, importar manual, sincronizar manual
+   (novos/modificados, sem duplicar; origem em `source_ref`). **Aguarda credenciais do usuário.**
+6. Backend online: hospedagem com disco persistente, HTTPS, `BIMOFFICE_API_TOKEN`, CORS. **Aguarda decisão.**
+7. Do plano original (não descartar): pesquisa contextual a partir de um memorial em elaboração;
+   editor do memorial (original × adaptado, rastreio de fonte); exportação DOCX; usuários/login; instalação com um clique.
 
 Fora do escopo do MVP: orçamento, clashes, Digital Twin, fotos, contratos, atividades.
 

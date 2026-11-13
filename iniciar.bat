@@ -54,6 +54,6 @@ echo Instalando a pesquisa semantica (na 1a vez pode demorar varios minutos)...
 pip install -q -r requirements-ml.txt || echo AVISO: pesquisa semantica indisponivel.
 
 echo.
-echo Abra no navegador: http://127.0.0.1:8000/docs
+echo Abra no navegador: http://127.0.0.1:8000/
 uvicorn backend.main:app --host 127.0.0.1 --port 8000
 pause
