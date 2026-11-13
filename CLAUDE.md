@@ -30,16 +30,22 @@ implementado, arquivos criados/modificados, como testar, limitações. Rodar `py
 antes de cada commit; commits pequenos e em português.
 
 ## Estado atual
-- **Etapa 1 CONCLUÍDA e testada (19 testes):** estrutura, SQLite+FTS5, importação DOCX (validação, hash, duplicados),
-  parser de seções/tabelas, chunker, biblioteca (filtros, metadados, lixeira, restauração, reindexação, backup),
-  busca textual FTS5, rotas FastAPI `/api/library/*`.
-- **Camada HTTP verificada:** `uvicorn backend.main:app` sobe, `/docs` abre, todas as rotas
+- **Etapa 1 CONCLUÍDA e verificada:** biblioteca, importação DOCX, parser, chunker, FTS5, rotas
   `/api/library/*` testadas com TestClient (`tests/test_api.py`) e com servidor real (curl).
-  PATCH de metadados agora valida o corpo (`DocumentUpdate`; erro 422 em vez de 500).
-- **Pendente:** testar com memoriais DOCX reais do usuário (só foram usados DOCX gerados nos testes).
+  Corrigido: PATCH valida o corpo (422); trechos só com título não viram trechos.
+- **Etapa 2 CONCLUÍDA (mecânica e qualidade com frases de teste):** `backend/semantic_search/`
+  (`providers.py` EmbeddingProvider + SentenceTransformerProvider E5 local-first offline;
+  `vector_store.py` BLOB float32 + numpy; `hybrid.py` RRF k=60, FTS em modo OR sem stopwords,
+  filtros unidade/disciplina/obra, aviso explícito se o modelo faltar), rotas `/api/search*`.
+  Testes: provedor falso só para mecânica (`tests/conftest.py`); modelo real em
+  `tests/test_semantic_real.py` (pulado se o modelo não estiver baixado). Benchmark: 8/10 top-1.
+- **Pendente:** validar parser e pesquisa com memoriais DOCX REAIS do usuário (pasta `amostras/`,
+  fora do Git; scripts `scripts/inspecionar_amostras.py` e `scripts/avaliar_pesquisa.py`).
+  Não há interface gráfica ainda (botão de reindexação = rota `POST /api/search/reindex` no `/docs`).
+- Ambiente na nuvem: PyTorch só-CPU via download.pytorch.org; modelo em `data/embeddings/modelos`.
+- **Aguardar confirmação do usuário antes de iniciar a Etapa 3.**
 
 ## Etapas restantes
-2. Embeddings locais + indexação vetorial + pesquisa híbrida (`backend/semantic_search/`), botão/rota de reindexação, medir qualidade com exemplos reais em português (ex.: "revestimento cerâmico nas paredes dos sanitários" ≈ "paredes dos banheiros com placas cerâmicas").
 3. Pesquisa contextual: importar memorial em elaboração, pesquisar documento inteiro ou por seção, agrupar resultados por assunto/disciplina.
 4. Memorial em elaboração + editor (títulos, seções, reordenar, editar, remover) + rastreio de fonte (original × adaptado).
 5. Exportação DOCX (python-docx; título/nome configuráveis; sem dados internos de pesquisa; avisar limites de formatação).

@@ -115,3 +115,27 @@ def test_search_routes(tmp_path):
         g = make_docx(tmp_path / "b.docx", styled=False)
         assert c.post("/api/library/documents",
                       files={"file": ("b.docx", g.read_bytes())}).status_code == 201
+
+
+def test_text_part_of_hybrid_matches_any_relevant_word(tmp_path):
+    _imp(tmp_path, "a.docx")
+    # frase inteira: o modo AND não acha nada; o híbrido acha pelas palavras relevantes
+    q = "Será executado revestimento cerâmico nas paredes dos banheiros novos"
+    assert svc.search_text(q) == []
+    res = hybrid.search(q, mode="text")
+    assert res["results"] and "Revestimentos" in res["results"][0]["section_path"]
+
+
+def test_relative_relevance_reflects_agreement(tmp_path):
+    _imp(tmp_path, "a.docx")
+    res = hybrid.search("revestimento cerâmico sanitários")
+    for r in res["results"]:
+        if len(r["found_by"]) == 1:
+            assert r["relative_relevance"] <= 50
+    sem = hybrid.search("revestimento cerâmico sanitários", mode="semantic")
+    assert sem["results"][0]["relative_relevance"] == 100
+
+
+def test_stopwords_only_query_still_works(tmp_path):
+    _imp(tmp_path, "a.docx")
+    assert isinstance(svc.search_text("de da do", match_any=True), list)

@@ -3,8 +3,10 @@
 RRF (Reciprocal Rank Fusion): cada busca dá uma posição a cada trecho; a nota final é
 a soma de 1/(k + posição). Trechos bem colocados nas duas buscas sobem.
 
-A "relevância relativa" (0–100) compara os resultados ENTRE SI nesta pesquisa
-(o 1º colocado = 100). Não é probabilidade nem equivalência técnica.
+A "relevância relativa" (0–100) é a nota RRF dividida pela maior nota possível nesta
+pesquisa: 100 = 1º lugar em TODAS as buscas usadas (semântica e textual concordam).
+Um trecho achado só por uma das buscas fica com no máximo ~50 na pesquisa híbrida.
+Não é probabilidade nem equivalência técnica.
 """
 from __future__ import annotations
 
@@ -71,7 +73,7 @@ def search(q: str, limit: int = 20, mode: str = "hybrid", unit: str = "",
             warnings.append("Resultados abaixo vêm SOMENTE da busca por palavras.")
 
     if mode in ("hybrid", "text"):
-        txt = lib.search_text(q, n, unit, discipline, project)
+        txt = lib.search_text(q, n, unit, discipline, project, match_any=True)
 
     fused: dict[int, dict] = {}
     for rank, (cid, cos) in enumerate(sem, 1):
@@ -85,14 +87,15 @@ def search(q: str, limit: int = 20, mode: str = "hybrid", unit: str = "",
 
     ranked = sorted(fused.items(), key=lambda kv: -kv[1]["rrf"])[:limit]
     info = _fetch_chunks([cid for cid, _ in ranked])
-    best = ranked[0][1]["rrf"] if ranked else 1.0
+    n_lists = int(out["semantic_used"]) + int(mode in ("hybrid", "text"))
+    best = max(n_lists, 1) / (config.RRF_K + 1)  # nota máxima possível
     for cid, e in ranked:
         if cid not in info:
             continue
         found_by = [n for n, k in (("semântica", "semantic_rank"), ("textual", "text_rank")) if k in e]
         out["results"].append({
             **info[cid],
-            "relative_relevance": round(100 * e["rrf"] / best),
+            "relative_relevance": min(100, round(100 * e["rrf"] / best)),
             "found_by": found_by,
             "semantic_rank": e.get("semantic_rank"),
             "semantic_similarity": e.get("semantic_similarity"),

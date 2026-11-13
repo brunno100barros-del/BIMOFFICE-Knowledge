@@ -54,15 +54,18 @@ class SentenceTransformerProvider(EmbeddingProvider):
                         "(pip install -r requirements-ml.txt)."
                     ) from e
                 config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
-                try:
-                    log.info("Carregando modelo de embeddings %s", self.name)
-                    self._model = SentenceTransformer(
-                        self.name, device=self.device, cache_folder=str(config.MODELS_DIR)
-                    )
-                except Exception as e:
-                    raise EmbeddingUnavailable(
-                        f"Não foi possível carregar o modelo {self.name}: {e}"
-                    ) from e
+                kw = dict(device=self.device, cache_folder=str(config.MODELS_DIR))
+                try:  # 1º: só a cópia local (funciona offline, sem contatar a internet)
+                    self._model = SentenceTransformer(self.name, local_files_only=True, **kw)
+                    log.info("Modelo de embeddings %s carregado da pasta local", self.name)
+                except Exception:
+                    try:  # 2º: baixa uma única vez (~1 GB) para data/embeddings/modelos
+                        log.info("Baixando modelo de embeddings %s (apenas na 1ª vez)", self.name)
+                        self._model = SentenceTransformer(self.name, **kw)
+                    except Exception as e:
+                        raise EmbeddingUnavailable(
+                            f"Não foi possível carregar o modelo {self.name}: {e}"
+                        ) from e
         return self._model
 
     def _encode(self, texts: list[str]) -> np.ndarray:

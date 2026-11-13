@@ -1,2 +1,5 @@
-# Etapa 2 (pesquisa semântica local) — baixa o modelo na primeira execução (~1 GB)
+# Etapa 2 (pesquisa semântica local). O modelo (~1 GB) é baixado na 1ª execução
+# para data/embeddings/modelos e depois funciona sem internet.
+# Linux: instale antes o PyTorch só-CPU (o iniciar.sh já faz isso):
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
 sentence-transformers>=3.0

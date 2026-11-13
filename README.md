@@ -1,7 +1,7 @@
 # BIMOFFICE Knowledge
 
 Biblioteca inteligente de memoriais descritivos (SENAI) com pesquisa semântica local.
-Status: **Etapa 1 de 7** (biblioteca + importação DOCX + busca textual). Veja `docs` abaixo.
+Status: **Etapa 2 de 7** (biblioteca + importação DOCX + pesquisa híbrida semântica/textual).
 
 ## Como executar (Windows)
 1. Instale o Python 3.11+ (python.org) marcando "Add to PATH".
@@ -22,11 +22,29 @@ python -m pytest -q
 - SQLite + FTS5 (busca por palavras, ignora acentos)
 - Filtros, edição de metadados, exclusão lógica (lixeira) + restauração, reindexação, backup
 
+## Etapa 2 — pesquisa inteligente
+- Modelo local `intfloat/multilingual-e5-base` (prefixos "query:"/"passage:"), roda no próprio
+  computador; nenhum texto de documento sai da máquina. Baixado uma vez (~1 GB).
+- Vetores gravados no SQLite; busca vetorial com numpy; fusão com a busca por palavras (RRF).
+- Rotas: `GET /api/search?q=...&unit=&discipline=&project=&mode=hybrid|semantic|text`,
+  `GET /api/search/status`, `POST /api/search/reindex` (gera vetores pendentes; `force=true` refaz todos).
+- **Relevância relativa** (0–100): 100 = 1º lugar nas duas buscas; achado por uma só ≤ ~50.
+  Não é probabilidade nem equivalência técnica — sempre revise o trecho.
+- Sem o modelo instalado, a pesquisa avisa e usa só a busca por palavras (nada é simulado).
+- Conferir seus memoriais: coloque DOCX em `amostras/` e rode
+  `python scripts/inspecionar_amostras.py` (seções/trechos) e
+  `python scripts/avaliar_pesquisa.py "sua pergunta"` (resultados da pesquisa).
+
 ## Limitações conhecidas
 - Numeração automática do Word não é lida; cabeçalhos/rodapés/caixas de texto não são indexados.
 - Página do trecho é apenas ESTIMADA (o DOCX não guarda paginação).
-- Pesquisa semântica (embeddings), editor, exportação e interface Liquid Glass: etapas 2–6.
-- Camada HTTP (FastAPI) ainda não foi executada em testes automatizados; os serviços foram.
+- Editor, exportação e interface Liquid Glass: etapas 3–6 (ainda não há tela; use `/docs`).
+- Busca por palavras não reconhece plural/singular ("elétrico" ≠ "elétricos"); a semântica cobre.
+- Qualidade medida em 10 paráfrases técnicas sem palavras em comum: 8/10 em 1º lugar, todas no
+  top 3 (só a parte semântica). Ainda NÃO medida com memoriais reais.
+- Busca vetorial carrega os vetores a cada pesquisa: ok para milhares de trechos; para dezenas de
+  milhares, trocar a camada por FAISS/Qdrant.
+- O PyTorch ocupa ~1 GB no `.venv`; a 1ª pesquisa após ligar o servidor demora alguns segundos.
 
 ## Privacidade
 `data/` (documentos, banco, backups) está no `.gitignore`: documentos da instituição não vão ao GitHub.

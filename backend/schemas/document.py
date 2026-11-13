@@ -75,8 +75,9 @@ class SearchResult(BaseModel):
     est_page: int | None = Field(None, description="Página ESTIMADA.")
     text: str
     relative_relevance: int = Field(
-        ..., description="Relevância RELATIVA (0–100) entre os resultados desta pesquisa; "
-                         "o 1º = 100. NÃO é probabilidade nem equivalência técnica.")
+        ..., description="Relevância RELATIVA (0–100): 100 = 1º lugar em todas as buscas "
+                         "usadas; achado por só uma busca ≤ ~50. NÃO é probabilidade nem "
+                         "equivalência técnica.")
     found_by: list[str] = Field(..., description="Quais buscas encontraram: semântica e/ou textual")
     semantic_rank: int | None = None
     semantic_similarity: float | None = Field(None, description="Cosseno entre vetores (técnico)")

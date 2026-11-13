@@ -294,16 +294,33 @@ def original_path(doc_id: int) -> Path:
 
 
 # ------------------------------------------------------------------ busca textual
-def _fts_query(q: str) -> str:
-    """Transforma o texto digitado em consulta FTS5 segura (termos entre aspas, AND)."""
+# Palavras sem conteúdo técnico, ignoradas no modo "qualquer palavra" (pesquisa híbrida).
+STOPWORDS_PT = set("""
+a à ao aos as às o os um uma uns umas de da do das dos dum duma em na no nas nos num numa
+e ou mas que se com sem por pela pelo pelas pelos para pra sob sobre entre até após ante
+é ser será serão são foi foram sendo seja sejam está estão estar ter terá terão tem têm
+deve devem deverá deverão haverá cada todo toda todos todas este esta estes estas esse essa
+isso isto aquele aquela seu sua seus suas lhe lhes como mais menos muito também já não sim
+""".split())
+
+
+def _fts_query(q: str, match_any: bool = False) -> str:
+    """Transforma o texto digitado em consulta FTS5 segura (termos entre aspas).
+
+    Padrão: todos os termos (AND). `match_any`: qualquer termo relevante (OR), usado na
+    pesquisa híbrida para frases inteiras; o BM25 prioriza trechos com mais termos em comum.
+    """
     terms = re.findall(r"\w+", q, flags=re.UNICODE)
-    return " ".join(f'"{t}"' for t in terms)
+    if not match_any:
+        return " ".join(f'"{t}"' for t in terms)
+    useful = [t for t in terms if t.lower() not in STOPWORDS_PT and len(t) > 1] or terms
+    return " OR ".join(f'"{t}"' for t in dict.fromkeys(t.lower() for t in useful))
 
 
 def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "",
-                project: str = "") -> list[dict]:
-    """Busca por palavras exatas (FTS5). Base da pesquisa híbrida da Etapa 2."""
-    fq = _fts_query(q)
+                project: str = "", match_any: bool = False) -> list[dict]:
+    """Busca por palavras exatas (FTS5). Também é a parte textual da pesquisa híbrida."""
+    fq = _fts_query(q, match_any)
     if not fq:
         return []
     sql = """
