@@ -1,0 +1,4 @@
+Coloque aqui 2 ou 3 memoriais descritivos (.docx) reais para teste.
+Esta pasta NÃO vai para o GitHub (está no .gitignore).
+Para conferir as seções/trechos detectados:
+    python scripts/inspecionar_amostras.py

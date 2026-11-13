@@ -49,3 +49,12 @@ def test_long_section_is_split(tmp_path):
     assert len(chunks) > 5
     assert all(len(c.text) <= 1800 * 1.25 for c in chunks)
     assert all(c.section_path == "Estrutura" for c in chunks)
+
+
+def test_heading_only_sections_do_not_become_chunks(tmp_path):
+    from backend.document_processing.chunker import chunk_document
+    from backend.document_processing.docx_parser import parse_docx
+    f = make_docx(tmp_path / "a.docx")  # título geral seguido direto de subtítulo
+    chunks = chunk_document(parse_docx(f))
+    assert chunks
+    assert all(not c.text.startswith("MEMORIAL DESCRITIVO") for c in chunks)

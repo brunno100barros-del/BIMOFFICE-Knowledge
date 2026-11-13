@@ -9,3 +9,7 @@ data/embeddings/*
 data/backups/*
 data/logs/
 !data/*/.gitkeep
+
+# Memoriais reais para teste local (nunca vão para o GitHub)
+amostras/*
+!amostras/LEIA-ME.txt

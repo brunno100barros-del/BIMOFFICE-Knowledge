@@ -71,11 +71,14 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
         section_index, path = group[0].section_index, group[0].section_path
         cur: list[tuple[int, str]] = []  # (posição, texto)
         cur_len = 0
+        has_body = False  # o trecho atual tem conteúdo além de títulos?
         built: list[Chunk] = []
 
         def flush():
-            nonlocal cur, cur_len, chars_so_far
-            if not cur:
+            nonlocal cur, cur_len, chars_so_far, has_body
+            if not cur or not has_body:
+                # trecho só com título(s): sem conteúdo útil, não vira trecho
+                cur, cur_len = [], 0
                 return
             text = "\n".join(t for _, t in cur)
             built.append(
@@ -85,7 +88,7 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
                 )
             )
             chars_so_far += len(text)
-            cur, cur_len = [], 0
+            cur, cur_len, has_body = [], 0, False
 
         for b in group:
             if b.kind == "heading":
@@ -98,6 +101,7 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
                     flush()
                 cur.append((b.index, piece))
                 cur_len += len(piece)
+                has_body = True
         flush()
 
         # une trecho final muito curto ao anterior (da mesma seção)
@@ -111,5 +115,4 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
                 built.append(last)
         chunks.extend(built)
 
-    # trechos compostos apenas pelo título não têm conteúdo útil
-    return [c for c in chunks if len(c.text.strip()) > 0]
+    return [c for c in chunks if c.text.strip()]
