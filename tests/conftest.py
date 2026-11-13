@@ -45,3 +45,37 @@ def make_docx(path: Path, styled: bool = True) -> Path:
         d.add_paragraph("A cobertura será em telha metálica trapezoidal com isolamento termoacústico.")
     d.save(path)
     return path
+
+
+class FakeEmbeddingProvider:
+    """SOMENTE PARA TESTES da mecânica (armazenamento, fusão RRF, filtros).
+    Vetor = contagem de palavras com hash; NÃO mede significado e nunca é usado no sistema.
+    A qualidade semântica real é testada em test_semantic_real.py com o modelo verdadeiro."""
+
+    name = "fake-test-provider"
+    dim = 256
+
+    def _vec(self, text):
+        import re
+
+        import numpy as np
+        v = np.zeros(self.dim, dtype=np.float32)
+        for w in re.findall(r"\w+", text.lower()):
+            v[hash(w) % self.dim] += 1
+        n = np.linalg.norm(v)
+        return v / n if n else v
+
+    def embed_passages(self, texts):
+        import numpy as np
+        return np.vstack([self._vec(t) for t in texts])
+
+    def embed_query(self, text):
+        return self._vec(text)
+
+
+@pytest.fixture(autouse=True)
+def fake_embeddings():
+    from backend.semantic_search import providers
+    providers.set_provider(FakeEmbeddingProvider())
+    yield
+    providers.set_provider(None)

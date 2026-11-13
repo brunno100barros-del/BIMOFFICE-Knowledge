@@ -61,3 +61,33 @@ class DocumentUpdate(BaseModel):
     doc_date: str | None = None
     description: str | None = None
     tags: str | list[str] | None = Field(None, description="Lista ou texto separado por vírgula")
+
+
+# ------------------------------------------------------------------ Etapa 2: pesquisa
+class SearchResult(BaseModel):
+    chunk_id: int
+    document_id: int
+    document_title: str
+    unit: str
+    project: str
+    discipline: str
+    section_path: str
+    est_page: int | None = Field(None, description="Página ESTIMADA.")
+    text: str
+    relative_relevance: int = Field(
+        ..., description="Relevância RELATIVA (0–100) entre os resultados desta pesquisa; "
+                         "o 1º = 100. NÃO é probabilidade nem equivalência técnica.")
+    found_by: list[str] = Field(..., description="Quais buscas encontraram: semântica e/ou textual")
+    semantic_rank: int | None = None
+    semantic_similarity: float | None = Field(None, description="Cosseno entre vetores (técnico)")
+    text_rank: int | None = None
+    snippet: str | None = None
+
+
+class SearchResponse(BaseModel):
+    query: str
+    mode: str
+    semantic_used: bool
+    model: str | None
+    warnings: list[str]
+    results: list[SearchResult]

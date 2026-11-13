@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 from backend import config
 from backend.database.db import init_db
-from backend.routes import library
+from backend.routes import library, search
 
 
 def _setup_logging() -> None:
@@ -31,8 +31,9 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="BIMOFFICE Knowledge", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="BIMOFFICE Knowledge", version="0.2.0", lifespan=lifespan)
 app.include_router(library.router)
+app.include_router(search.router)
 
 
 @app.get("/api/health")

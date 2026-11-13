@@ -300,7 +300,8 @@ def _fts_query(q: str) -> str:
     return " ".join(f'"{t}"' for t in terms)
 
 
-def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "") -> list[dict]:
+def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "",
+                project: str = "") -> list[dict]:
     """Busca por palavras exatas (FTS5). Base da pesquisa híbrida da Etapa 2."""
     fq = _fts_query(q)
     if not fq:
@@ -321,6 +322,9 @@ def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "") -
     if discipline:
         sql += " AND d.discipline = ? COLLATE NOCASE"
         params.append(discipline)
+    if project:
+        sql += " AND d.project = ? COLLATE NOCASE"
+        params.append(project)
     sql += " ORDER BY bm25(chunks_fts) LIMIT ?"
     params.append(limit)
     with get_conn() as conn:

@@ -28,3 +28,15 @@ CHUNK_MIN_CHARS = 150
 def ensure_dirs() -> None:
     for d in (DOCUMENTS_DIR, DATABASE_DIR, EMBEDDINGS_DIR, BACKUPS_DIR, LOGS_DIR):
         d.mkdir(parents=True, exist_ok=True)
+
+# ------------------------------------------------------------------ Etapa 2: pesquisa semântica
+# Modelo local de embeddings (roda no próprio computador; nenhum texto sai da máquina).
+EMBEDDING_MODEL = os.environ.get("BIMOFFICE_EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
+# Pasta onde o modelo baixado fica guardado (dentro de data/, fora do Git).
+MODELS_DIR = EMBEDDINGS_DIR / "modelos"
+EMBEDDING_BATCH_SIZE = 16
+# Gerar os vetores logo ao importar/reindexar (se o modelo estiver disponível).
+EMBED_ON_IMPORT = os.environ.get("BIMOFFICE_EMBED_ON_IMPORT", "1") == "1"
+# Pesquisa híbrida: quantos candidatos cada busca fornece e constante k da fusão RRF.
+HYBRID_CANDIDATES = 50
+RRF_K = 60

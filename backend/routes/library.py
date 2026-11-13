@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 
 from backend import config
 from backend.schemas.document import ChunkOut, DocumentOut, DocumentUpdate, SectionOut, TextHit
+from backend.semantic_search.hybrid import index_after_change
 from backend.services import library_service as svc
 
 router = APIRouter(prefix="/api/library", tags=["biblioteca"])
@@ -36,12 +37,14 @@ async def import_document(
     meta = dict(title=title, unit=unit, project=project, discipline=discipline,
                 doc_date=doc_date, description=description, tags=tags)
     try:
-        return svc.import_document(file.filename or "", data, meta)
+        doc = svc.import_document(file.filename or "", data, meta)
     except svc.LibraryError as e:
         raise _http(e)
     except Exception:
         log.exception("Erro inesperado ao importar")
         raise HTTPException(500, "Erro ao processar o documento. Veja data/logs/bimoffice.log.")
+    index_after_change(doc["id"])  # vetores da pesquisa semântica (não bloqueia se faltar o modelo)
+    return svc.get_document(doc["id"])
 
 
 @router.get("/documents", response_model=list[DocumentOut])
@@ -95,9 +98,11 @@ def download_original(doc_id: int):
 @router.post("/documents/{doc_id}/reindex", response_model=DocumentOut)
 def reindex(doc_id: int):
     try:
-        return svc.reindex_document(doc_id)
+        doc = svc.reindex_document(doc_id)
     except svc.LibraryError as e:
         raise _http(e)
+    index_after_change(doc_id)
+    return doc
 
 
 @router.delete("/documents/{doc_id}", status_code=204)
@@ -111,14 +116,16 @@ def delete_document(doc_id: int):
 @router.post("/documents/{doc_id}/restore", response_model=DocumentOut)
 def restore(doc_id: int):
     try:
-        return svc.restore_document(doc_id)
+        doc = svc.restore_document(doc_id)
     except svc.LibraryError as e:
         raise _http(e)
+    index_after_change(doc_id)
+    return doc
 
 
 @router.get("/search-text", response_model=list[TextHit])
-def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = ""):
-    return svc.search_text(q, limit, unit, discipline)
+def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "", project: str = ""):
+    return svc.search_text(q, limit, unit, discipline, project)
 
 
 @router.post("/backup")
