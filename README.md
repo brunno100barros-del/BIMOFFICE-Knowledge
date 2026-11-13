@@ -4,7 +4,9 @@ Biblioteca inteligente de memoriais descritivos (SENAI) com pesquisa semântica 
 Status: **Etapa 2 de 7** (biblioteca + importação DOCX + pesquisa híbrida semântica/textual).
 
 ## Como executar (Windows)
-1. Instale o Python 3.11+ (python.org) marcando "Add to PATH".
+1. Instale o Python **3.13** (python.org) marcando "Add python.exe to PATH".
+   Use 3.11, 3.12 ou 3.13: versões mais novas (3.14, 3.15) ainda não têm o PyTorch,
+   usado pela pesquisa semântica. O `iniciar.bat` escolhe sozinho uma versão compatível.
 2. Dê dois cliques em `iniciar.bat`.
 3. Abra http://127.0.0.1:8000/docs — a página permite testar a API (importar DOCX, listar, buscar).
 
