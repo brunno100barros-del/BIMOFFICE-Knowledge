@@ -81,12 +81,31 @@ END;
 """
 
 
+# Colunas acrescentadas depois da 1ª versão (migração automática, sem perder dados).
+MIGRATIONS = {
+    "documents": [
+        ("file_type", "TEXT NOT NULL DEFAULT 'docx'"),      # docx | pdf
+        ("source", "TEXT NOT NULL DEFAULT 'upload'"),       # upload | gdrive
+        ("source_ref", "TEXT NOT NULL DEFAULT '{}'"),       # JSON: pasta/arquivo de origem
+    ],
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, cols in MIGRATIONS.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, ddl in cols:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+
+
 def init_db(db_path: Path | None = None) -> None:
     path = db_path or config.DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     try:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         conn.commit()
     finally:
         conn.close()

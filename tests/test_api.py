@@ -90,3 +90,62 @@ def test_patch_validates_body(client, tmp_path):
     r = client.patch(f"/api/library/documents/{did}", json={"tags": ["b", "a"]})
     assert r.status_code == 200 and r.json()["tags"] == ["a", "b"]
     assert client.patch("/api/library/documents/999", json={"title": "x"}).status_code == 404
+
+
+# ------------------------------------------------------------------ evolução: PDF, painel, acesso web
+def test_pdf_upload_stats_and_inline_original(client, tmp_path):
+    from tests.conftest import PDF_PAGES, make_pdf
+    f = make_pdf(tmp_path / "m.pdf", PDF_PAGES)
+    r = client.post("/api/library/documents",
+                    files={"file": ("m.pdf", f.read_bytes(), "application/pdf")})
+    assert r.status_code == 201, r.text
+    did = r.json()["id"]
+    assert r.json()["file_type"] == "pdf"
+    _upload(client, tmp_path)  # + 1 DOCX
+    st = client.get("/api/library/stats").json()
+    assert (st["documents_total"], st["documents_docx"], st["documents_pdf"]) == (2, 1, 1)
+    assert len(st["recent"]) == 2
+    r = client.get(f"/api/library/documents/{did}/original", params={"inline": True})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("inline")
+    assert r.content == f.read_bytes()
+    pdfs = client.get("/api/library/documents", params={"file_type": "pdf"}).json()
+    assert [d["id"] for d in pdfs] == [did]
+
+
+def test_scanned_pdf_returns_clear_400(client, tmp_path):
+    from tests.conftest import make_pdf
+    f = make_pdf(tmp_path / "scan.pdf", [[]])
+    r = client.post("/api/library/documents", files={"file": ("scan.pdf", f.read_bytes())})
+    assert r.status_code == 400 and "texto extraível" in r.json()["detail"]
+
+
+def test_config_endpoint(client):
+    c = client.get("/api/config").json()
+    assert ".pdf" in c["allowed_extensions"] and c["auth_required"] is False
+    assert c["gdrive"]["available"] is False
+
+
+def test_api_token_protects_api(client, monkeypatch):
+    from backend import config
+    monkeypatch.setattr(config, "API_TOKEN", "segredo-123")
+    assert client.get("/api/health").status_code == 200          # público
+    assert client.get("/api/config").json()["auth_required"] is True
+    assert client.get("/api/library/documents").status_code == 401
+    bad = {"Authorization": "Bearer errado"}
+    assert client.get("/api/library/documents", headers=bad).status_code == 401
+    ok = {"Authorization": "Bearer segredo-123"}
+    assert client.get("/api/library/documents", headers=ok).status_code == 200
+
+
+def test_cors_allows_github_pages_and_private_network(client):
+    origin = "https://brunno100barros-del.github.io"
+    r = client.options("/api/library/stats", headers={
+        "Origin": origin, "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+        "Access-Control-Request-Private-Network": "true"})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == origin
+    assert r.headers["access-control-allow-private-network"] == "true"
+    r = client.get("/api/health", headers={"Origin": "https://site-estranho.example"})
+    assert "access-control-allow-origin" not in r.headers

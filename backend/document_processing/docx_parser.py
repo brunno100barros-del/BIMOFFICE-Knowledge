@@ -31,6 +31,7 @@ class Block:
     text: str
     section_path: str
     section_index: int | None = None  # índice em ParsedDocument.sections
+    page: int | None = None           # página REAL (PDF); DOCX não tem (None)
 
 
 @dataclass

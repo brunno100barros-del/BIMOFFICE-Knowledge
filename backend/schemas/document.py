@@ -14,6 +14,9 @@ class DocumentOut(BaseModel):
     tags: list[str]
     original_filename: str
     sha256: str
+    file_type: str = Field("docx", description="docx | pdf")
+    source: str = Field("upload", description="upload | gdrive")
+    source_ref: dict = Field(default_factory=dict, description="Origem: pasta/arquivo do Drive etc.")
     n_sections: int
     n_chunks: int
     created_at: str
@@ -68,11 +71,13 @@ class SearchResult(BaseModel):
     chunk_id: int
     document_id: int
     document_title: str
+    original_filename: str = ""
+    file_type: str = "docx"
     unit: str
     project: str
     discipline: str
     section_path: str
-    est_page: int | None = Field(None, description="Página ESTIMADA.")
+    est_page: int | None = Field(None, description="Página: real no PDF, ESTIMADA no DOCX.")
     text: str
     relative_relevance: int = Field(
         ..., description="Relevância RELATIVA (0–100): 100 = 1º lugar em todas as buscas "

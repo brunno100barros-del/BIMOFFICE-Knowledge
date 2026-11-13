@@ -72,25 +72,28 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
         cur: list[tuple[int, str]] = []  # (posição, texto)
         cur_len = 0
         has_body = False  # o trecho atual tem conteúdo além de títulos?
+        cur_page: int | None = None  # página real do 1º bloco (PDF)
         built: list[Chunk] = []
 
         def flush():
-            nonlocal cur, cur_len, chars_so_far, has_body
+            nonlocal cur, cur_len, chars_so_far, has_body, cur_page
             if not cur or not has_body:
                 # trecho só com título(s): sem conteúdo útil, não vira trecho
-                cur, cur_len = [], 0
+                cur, cur_len, cur_page = [], 0, None
                 return
             text = "\n".join(t for _, t in cur)
             built.append(
                 Chunk(
                     section_index, path, cur[0][0], cur[-1][0],
-                    chars_so_far // CHARS_PER_PAGE + 1, text,
+                    cur_page or chars_so_far // CHARS_PER_PAGE + 1, text,
                 )
             )
             chars_so_far += len(text)
-            cur, cur_len, has_body = [], 0, False
+            cur, cur_len, has_body, cur_page = [], 0, False, None
 
         for b in group:
+            if not cur:
+                cur_page = b.page
             if b.kind == "heading":
                 # o título fica no trecho para dar contexto
                 cur.append((b.index, b.text))
@@ -99,6 +102,8 @@ def chunk_document(parsed: ParsedDocument) -> list[Chunk]:
             for piece in _split_long(b.text, maxc):
                 if cur and cur_len + len(piece) > target:
                     flush()
+                if not cur:
+                    cur_page = b.page
                 cur.append((b.index, piece))
                 cur_len += len(piece)
                 has_body = True

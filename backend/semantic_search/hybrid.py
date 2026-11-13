@@ -29,7 +29,8 @@ def _fetch_chunks(ids: list[int]) -> dict[int, dict]:
     marks = ",".join("?" * len(ids))
     with get_conn() as conn:
         rows = conn.execute(
-            f"""SELECT c.id AS chunk_id, c.document_id, d.title AS document_title, d.unit,
+            f"""SELECT c.id AS chunk_id, c.document_id, d.title AS document_title,
+                       d.original_filename, d.file_type, d.unit,
                        d.project, d.discipline, c.section_path, c.est_page, c.text
                 FROM chunks c JOIN documents d ON d.id = c.document_id
                 WHERE c.id IN ({marks})""",

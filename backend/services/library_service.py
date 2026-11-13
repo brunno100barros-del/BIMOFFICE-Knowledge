@@ -24,6 +24,7 @@ from backend import config
 from backend.database.db import get_conn
 from backend.document_processing.chunker import chunk_document
 from backend.document_processing.docx_parser import parse_docx
+from backend.document_processing.pdf_parser import PdfWithoutText, parse_pdf
 
 log = logging.getLogger("bimoffice.library")
 
@@ -47,14 +48,19 @@ class NotFound(LibraryError):
 
 
 # ------------------------------------------------------------------ validação
-def validate_upload(filename: str, data: bytes) -> None:
+def validate_upload(filename: str, data: bytes) -> str:
+    """Valida o arquivo e retorna o tipo ("docx" ou "pdf")."""
     ext = Path(filename or "").suffix.lower()
     if ext not in config.ALLOWED_EXTENSIONS:
-        raise InvalidFile("Somente arquivos .docx são aceitos.")
+        raise InvalidFile("Somente arquivos .docx e .pdf são aceitos.")
     if not data:
         raise InvalidFile("O arquivo está vazio.")
     if len(data) > config.MAX_UPLOAD_BYTES:
         raise InvalidFile(f"Arquivo maior que {config.MAX_UPLOAD_BYTES // (1024*1024)} MB.")
+    if ext == ".pdf":
+        if b"%PDF-" not in data[:1024]:
+            raise InvalidFile("O arquivo não parece ser um PDF válido.")
+        return "pdf"
     # DOCX é um ZIP contendo word/document.xml
     try:
         with zipfile.ZipFile(BytesIO(data)) as z:
@@ -65,6 +71,7 @@ def validate_upload(filename: str, data: bytes) -> None:
                 raise InvalidFile("Conteúdo descompactado grande demais.")
     except zipfile.BadZipFile:
         raise InvalidFile("O arquivo não parece ser um DOCX válido.")
+    return "docx"
 
 
 def _safe_name(name: str) -> str:
@@ -76,6 +83,7 @@ def _doc_row_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
     d.pop("stored_path", None)
     d["tags"] = json.loads(d.get("tags") or "[]")
+    d["source_ref"] = json.loads(d.get("source_ref") or "{}")
     return d
 
 
@@ -103,7 +111,15 @@ def backup_database() -> Path:
 # ------------------------------------------------------------------ indexação
 def _index_file(conn: sqlite3.Connection, document_id: int, path: Path) -> tuple[int, int]:
     """(Re)cria seções e trechos de um documento a partir do arquivo armazenado."""
-    parsed = parse_docx(path)
+    try:
+        parsed = parse_pdf(path) if path.suffix.lower() == ".pdf" else parse_docx(path)
+    except PdfWithoutText as e:
+        raise InvalidFile(str(e))
+    except ValueError as e:  # ex.: PDF protegido por senha
+        raise InvalidFile(str(e))
+    except Exception as e:
+        log.exception("Falha ao ler %s", path.name)
+        raise InvalidFile(f"Não foi possível ler o conteúdo do arquivo ({type(e).__name__}).")
     chunks = chunk_document(parsed)
     if not chunks:
         raise InvalidFile("Não foi encontrado texto no documento.")
@@ -137,9 +153,11 @@ def _index_file(conn: sqlite3.Connection, document_id: int, path: Path) -> tuple
 
 
 # ------------------------------------------------------------------ operações
-def import_document(filename: str, data: bytes, meta: dict) -> dict:
+def import_document(filename: str, data: bytes, meta: dict,
+                    source: str = "upload", source_ref: dict | None = None) -> dict:
+    """Importa DOCX/PDF. `source`/`source_ref` registram de onde veio (ex.: pasta do Drive)."""
     config.ensure_dirs()
-    validate_upload(filename, data)
+    file_type = validate_upload(filename, data)
     sha = hashlib.sha256(data).hexdigest()
 
     with get_conn() as conn:
@@ -149,7 +167,7 @@ def import_document(filename: str, data: bytes, meta: dict) -> dict:
         if dup:
             raise DuplicateDocument(dup["id"], dup["title"])
 
-    stored_rel = f"{sha}.docx"
+    stored_rel = f"{sha}.{file_type}"
     stored = config.DOCUMENTS_DIR / stored_rel
     created_file = False
     if not stored.exists():
@@ -161,8 +179,9 @@ def import_document(filename: str, data: bytes, meta: dict) -> dict:
         with get_conn() as conn:
             cur = conn.execute(
                 """INSERT INTO documents(title, unit, project, discipline, doc_date,
-                       description, tags, original_filename, sha256, stored_path)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                       description, tags, original_filename, sha256, stored_path,
+                       file_type, source, source_ref)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     (meta.get("title") or Path(filename).stem).strip(),
                     (meta.get("unit") or "").strip(),
@@ -172,6 +191,7 @@ def import_document(filename: str, data: bytes, meta: dict) -> dict:
                     (meta.get("description") or "").strip(),
                     json.dumps(_parse_tags(meta.get("tags"))),
                     _safe_name(filename), sha, stored_rel,
+                    file_type, source, json.dumps(source_ref or {}, ensure_ascii=False),
                 ),
             )
             doc_id = cur.lastrowid
@@ -196,9 +216,12 @@ def get_document(doc_id: int, include_deleted: bool = False) -> dict:
 
 def list_documents(
     unit: str = "", project: str = "", discipline: str = "", tag: str = "",
-    q: str = "", include_deleted: bool = False,
+    q: str = "", include_deleted: bool = False, file_type: str = "",
 ) -> list[dict]:
     sql, params = "SELECT * FROM documents WHERE 1=1", []
+    if file_type:
+        sql += " AND file_type = ?"
+        params.append(file_type.lower())
     if not include_deleted:
         sql += " AND deleted_at IS NULL"
     for col, val in (("unit", unit), ("project", project), ("discipline", discipline)):
@@ -273,13 +296,13 @@ def restore_document(doc_id: int) -> dict:
         if dup:
             raise DuplicateDocument(dup["id"], dup["title"])
         conn.execute("UPDATE documents SET deleted_at=NULL WHERE id=?", (doc_id,))
-        _index_file(conn, doc_id, config.DOCUMENTS_DIR / f"{doc['sha256']}.docx")
+        _index_file(conn, doc_id, _stored_file(doc_id))
     return get_document(doc_id)
 
 
 def reindex_document(doc_id: int) -> dict:
     doc = get_document(doc_id)
-    stored = config.DOCUMENTS_DIR / f"{doc['sha256']}.docx"
+    stored = _stored_file(doc_id)
     if not stored.exists():
         raise LibraryError("O arquivo original não foi encontrado em data/documents.")
     backup_database()
@@ -288,9 +311,47 @@ def reindex_document(doc_id: int) -> dict:
     return get_document(doc_id)
 
 
+def _stored_file(doc_id: int) -> Path:
+    with get_conn() as conn:
+        r = conn.execute("SELECT stored_path FROM documents WHERE id=?", (doc_id,)).fetchone()
+    if not r:
+        raise NotFound("Documento não encontrado.")
+    return config.DOCUMENTS_DIR / r["stored_path"]
+
+
 def original_path(doc_id: int) -> Path:
-    doc = get_document(doc_id)
-    return config.DOCUMENTS_DIR / f"{doc['sha256']}.docx"
+    get_document(doc_id)
+    return _stored_file(doc_id)
+
+
+def stats() -> dict:
+    """Números do painel (somente documentos ativos)."""
+    with get_conn() as conn:
+        by_type = {r["file_type"]: r["n"] for r in conn.execute(
+            "SELECT file_type, COUNT(*) AS n FROM documents WHERE deleted_at IS NULL GROUP BY file_type")}
+        trash = conn.execute("SELECT COUNT(*) FROM documents WHERE deleted_at IS NOT NULL").fetchone()[0]
+        ch = conn.execute(
+            """SELECT COUNT(*) AS total, SUM(c.embedding IS NOT NULL) AS vec
+               FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.deleted_at IS NULL"""
+        ).fetchone()
+        recent = conn.execute(
+            "SELECT * FROM documents WHERE deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 6"
+        ).fetchall()
+        facets = {
+            col: [r[0] for r in conn.execute(
+                f"SELECT DISTINCT {col} FROM documents WHERE deleted_at IS NULL AND {col} != '' ORDER BY 1")]
+            for col in ("unit", "project", "discipline")
+        }
+    return {
+        "documents_total": sum(by_type.values()),
+        "documents_docx": by_type.get("docx", 0),
+        "documents_pdf": by_type.get("pdf", 0),
+        "documents_in_trash": trash,
+        "chunks_total": ch["total"] or 0,
+        "chunks_with_vectors": ch["vec"] or 0,
+        "recent": [_doc_row_to_dict(r) for r in recent],
+        "facets": facets,
+    }
 
 
 # ------------------------------------------------------------------ busca textual

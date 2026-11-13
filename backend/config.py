@@ -16,7 +16,7 @@ BACKUPS_DIR = DATA_DIR / "backups"
 LOGS_DIR = DATA_DIR / "logs"
 DB_PATH = DATABASE_DIR / "bimoffice.db"
 
-ALLOWED_EXTENSIONS = {".docx"}
+ALLOWED_EXTENSIONS = {".docx", ".pdf"}
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 # Parâmetros de divisão em trechos (caracteres)
@@ -40,3 +40,15 @@ EMBED_ON_IMPORT = os.environ.get("BIMOFFICE_EMBED_ON_IMPORT", "1") == "1"
 # Pesquisa híbrida: quantos candidatos cada busca fornece e constante k da fusão RRF.
 HYBRID_CANDIDATES = 50
 RRF_K = 60
+
+# ------------------------------------------------------------------ acesso pela web
+# Origens (sites) que podem chamar a API pelo navegador. Separe por vírgula.
+# Inclui o GitHub Pages do projeto e o próprio computador.
+CORS_ORIGINS = [o.strip() for o in os.environ.get(
+    "BIMOFFICE_CORS_ORIGINS",
+    "http://127.0.0.1:8000,http://localhost:8000,https://brunno100barros-del.github.io",
+).split(",") if o.strip()]
+# Senha de acesso à API (opcional). Se definida, toda chamada /api/* precisa do cabeçalho
+# "Authorization: Bearer <senha>". Obrigatória quando o backend estiver na internet.
+API_TOKEN = os.environ.get("BIMOFFICE_API_TOKEN", "")
+FRONTEND_DIR = BASE_DIR / "frontend"

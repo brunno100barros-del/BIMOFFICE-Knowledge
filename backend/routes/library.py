@@ -49,8 +49,15 @@ async def import_document(
 
 @router.get("/documents", response_model=list[DocumentOut])
 def list_documents(unit: str = "", project: str = "", discipline: str = "",
-                   tag: str = "", q: str = "", include_deleted: bool = False):
-    return svc.list_documents(unit, project, discipline, tag, q, include_deleted)
+                   tag: str = "", q: str = "", include_deleted: bool = False,
+                   file_type: str = ""):
+    return svc.list_documents(unit, project, discipline, tag, q, include_deleted, file_type)
+
+
+@router.get("/stats")
+def stats():
+    """Números do painel: total, DOCX, PDF, recentes e valores para filtros."""
+    return svc.stats()
 
 
 @router.get("/documents/{doc_id}", response_model=DocumentOut)
@@ -86,11 +93,17 @@ def chunks(doc_id: int):
 
 
 @router.get("/documents/{doc_id}/original")
-def download_original(doc_id: int):
-    """Baixa uma cópia do DOCX original (somente leitura; nunca é alterado)."""
+def download_original(doc_id: int, inline: bool = False):
+    """Cópia do arquivo original (somente leitura; nunca é alterado).
+    `inline=true` abre no navegador (útil para PDF); senão, baixa."""
     try:
         doc = svc.get_document(doc_id)
-        return FileResponse(svc.original_path(doc_id), filename=doc["original_filename"])
+        media = ("application/pdf" if doc["file_type"] == "pdf" else
+                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        return FileResponse(
+            svc.original_path(doc_id), filename=doc["original_filename"], media_type=media,
+            content_disposition_type="inline" if inline else "attachment",
+        )
     except svc.LibraryError as e:
         raise _http(e)
 

@@ -79,3 +79,56 @@ def fake_embeddings():
     providers.set_provider(FakeEmbeddingProvider())
     yield
     providers.set_provider(None)
+
+
+def make_pdf(path: Path, pages: list[list[str]]) -> Path:
+    """Gera um PDF de TESTE com texto real (fonte Helvetica, acentos em WinAnsi).
+    Cada página é uma lista de linhas. Página vazia = página sem texto."""
+    def esc(s: str) -> bytes:
+        b = s.encode("cp1252")
+        return b.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
+
+    objs: list[bytes] = []
+    n_pages = len(pages)
+    page_ids = [3 + 2 * i for i in range(n_pages)]
+    font_id = 3 + 2 * n_pages
+    objs.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    objs.append(b"<< /Type /Pages /Kids [" + b" ".join(b"%d 0 R" % p for p in page_ids)
+                + b"] /Count %d >>" % n_pages)
+    for i, lines in enumerate(pages):
+        content = b""
+        if lines:
+            content = b"BT /F1 11 Tf 14 TL 50 800 Td " + b" ".join(
+                b"(" + esc(l) + b") Tj T*" for l in lines) + b" ET"
+        objs.append(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+                    b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+                    % (font_id, page_ids[i] + 1))
+        objs.append(b"<< /Length %d >>\nstream\n" % len(content) + content + b"\nendstream")
+    objs.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+                b"/Encoding /WinAnsiEncoding >>")
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, o in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+    out += b"".join(b"%010d 00000 n \n" % off for off in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
+    path.write_bytes(bytes(out))
+    return path
+
+
+PDF_PAGES = [
+    ["MEMORIAL DESCRITIVO - SENAI", "1 DISPOSIÇÕES GERAIS",
+     "Este memorial descreve os serviços de reforma do bloco de salas de aula,",
+     "incluindo demolições, revestimentos e instalações.",
+     "2 REVESTIMENTOS", "2.1 Paredes",
+     "As paredes dos banheiros receberão acabamento em placas cerâmicas de 30x60 cm, assen-",
+     "tadas com argamassa colante AC-II.", "Página 1 de 3"],
+    ["MEMORIAL DESCRITIVO - SENAI", "3 COBERTURA",
+     "A cobertura será executada em telha metálica trapezoidal com isolamento",
+     "termoacústico em lã de rocha.", "Página 2 de 3"],
+    ["MEMORIAL DESCRITIVO - SENAI", "4 PINTURA",
+     "As paredes internas receberão tinta acrílica fosca em duas demãos.", "Página 3 de 3"],
+]
