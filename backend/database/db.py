@@ -78,6 +78,98 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE OF text, section_path ON chu
     INSERT INTO chunks_fts(rowid, text, section_path)
     VALUES (new.id, new.text, new.section_path);
 END;
+
+-- ================================================================ PROJETOS (v0.4)
+-- Separado da biblioteca: projetos em elaboração nunca alteram a biblioteca de memoriais.
+CREATE TABLE IF NOT EXISTS projects (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    location    TEXT NOT NULL DEFAULT '',
+    disciplines TEXT NOT NULL DEFAULT '[]',            -- lista JSON
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS project_files (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id        INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind              TEXT NOT NULL,                   -- ifc | pdf | docx | image
+    original_filename TEXT NOT NULL,
+    sha256            TEXT NOT NULL,
+    stored_path       TEXT NOT NULL,                   -- relativo a PROJECT_FILES_DIR (somente leitura)
+    size_bytes        INTEGER NOT NULL,
+    discipline        TEXT NOT NULL DEFAULT '',
+    version           INTEGER NOT NULL DEFAULT 1,      -- mesmo nome com conteúdo novo = nova versão
+    previous_file_id  INTEGER REFERENCES project_files(id),
+    status            TEXT NOT NULL DEFAULT 'armazenado', -- armazenado | na fila | processando | processado | erro | cancelado
+    error             TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at        TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_pfiles_project ON project_files(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pfiles_sha_active
+    ON project_files(project_id, sha256) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS ifc_models (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id       INTEGER NOT NULL UNIQUE REFERENCES project_files(id) ON DELETE CASCADE,
+    project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    schema_name   TEXT NOT NULL,
+    header        TEXT NOT NULL DEFAULT '{}',          -- JSON: aplicativo, data, nome do projeto IFC
+    units         TEXT NOT NULL DEFAULT '{}',          -- JSON: escalas para SI
+    summary       TEXT NOT NULL DEFAULT '{}',          -- JSON: inventário técnico
+    n_elements    INTEGER NOT NULL DEFAULT 0,
+    parse_seconds REAL,
+    processed_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ifc_elements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id        INTEGER NOT NULL REFERENCES ifc_models(id) ON DELETE CASCADE,
+    project_id      INTEGER NOT NULL,
+    global_id       TEXT,
+    ifc_class       TEXT NOT NULL,
+    predefined_type TEXT,
+    name            TEXT,
+    type_name       TEXT,
+    storey          TEXT,
+    discipline      TEXT NOT NULL,
+    confidence      TEXT NOT NULL,                     -- alta | média | baixa
+    missing         TEXT NOT NULL DEFAULT '[]',        -- JSON: informações não encontradas
+    data            TEXT NOT NULL                      -- JSON completo (psets, materiais, quantidades, origem)
+);
+CREATE INDEX IF NOT EXISTS ix_ifcel_model ON ifc_elements(model_id);
+CREATE INDEX IF NOT EXISTS ix_ifcel_disc ON ifc_elements(model_id, discipline);
+CREATE INDEX IF NOT EXISTS ix_ifcel_class ON ifc_elements(model_id, ifc_class);
+
+-- Tarefas em segundo plano (persistidas: sobrevivem a reinício e são retomadas)
+CREATE TABLE IF NOT EXISTS jobs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind             TEXT NOT NULL,                    -- ex.: ifc_parse
+    project_id       INTEGER,
+    target_id        INTEGER,                          -- ex.: id do arquivo
+    status           TEXT NOT NULL DEFAULT 'na fila',  -- na fila | executando | concluído | erro | cancelado
+    progress         REAL NOT NULL DEFAULT 0,
+    message          TEXT NOT NULL DEFAULT '',
+    error            TEXT,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at       TEXT,
+    finished_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_jobs_status ON jobs(status);
+
+CREATE TABLE IF NOT EXISTS project_history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    at         TEXT NOT NULL DEFAULT (datetime('now')),
+    event      TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS ix_phist_project ON project_history(project_id);
 """
 
 

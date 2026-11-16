@@ -16,9 +16,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from backend import config
+from backend import config, jobs
 from backend.database.db import init_db
-from backend.routes import library, search
+from backend.routes import library, projects, search
 from backend.semantic_search.providers import get_provider
 
 PUBLIC_PATHS = {"/api/health", "/api/config"}
@@ -40,10 +40,13 @@ def _setup_logging() -> None:
 async def lifespan(app: FastAPI):
     _setup_logging()
     init_db()
+    if config.START_JOB_WORKER:
+        jobs.start_worker()  # processamento pesado (IFC) em segundo plano
     yield
+    jobs.stop_worker()
 
 
-app = FastAPI(title="BIMOFFICE Knowledge", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="BIMOFFICE Knowledge", version="0.4.0", lifespan=lifespan)
 
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -74,11 +77,21 @@ app.add_middleware(
 
 app.include_router(library.router)
 app.include_router(search.router)
+app.include_router(projects.router)
 
 
 @app.get("/api/health")
 def health():
     return {"status": "ok", "version": app.version}
+
+
+def _ifc_status() -> dict:
+    try:
+        import ifcopenshell
+        return {"available": True, "library": f"IfcOpenShell {ifcopenshell.version}",
+                "schemas": ["IFC2X3", "IFC4", "IFC4X3"], "max_mb": config.MAX_IFC_BYTES // (1024 * 1024)}
+    except Exception as e:  # biblioteca ausente: o resto do sistema continua funcionando
+        return {"available": False, "reason": f"IfcOpenShell não instalado ({type(e).__name__})."}
 
 
 @app.get("/api/config")
@@ -95,6 +108,7 @@ def public_config():
             "package_installed": importlib.util.find_spec("sentence_transformers") is not None,
             "model_downloaded": model_dir.exists(),
         },
+        "ifc": _ifc_status(),
         "gdrive": {
             "available": False,
             "reason": "Integração com o Google Drive ainda não implementada: depende de "

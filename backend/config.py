@@ -26,7 +26,8 @@ CHUNK_MIN_CHARS = 150
 
 
 def ensure_dirs() -> None:
-    for d in (DOCUMENTS_DIR, DATABASE_DIR, EMBEDDINGS_DIR, BACKUPS_DIR, LOGS_DIR):
+    for d in (DOCUMENTS_DIR, DATABASE_DIR, EMBEDDINGS_DIR, BACKUPS_DIR, LOGS_DIR,
+              DATA_DIR / "projects"):
         d.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------------------------------------------ Etapa 2: pesquisa semântica
@@ -52,3 +53,14 @@ CORS_ORIGINS = [o.strip() for o in os.environ.get(
 # "Authorization: Bearer <senha>". Obrigatória quando o backend estiver na internet.
 API_TOKEN = os.environ.get("BIMOFFICE_API_TOKEN", "")
 FRONTEND_DIR = BASE_DIR / "frontend"
+
+# ------------------------------------------------------------------ projetos e IFC (v0.4)
+PROJECT_FILES_DIR = DATA_DIR / "projects"
+PROJECT_EXTENSIONS = {".ifc": "ifc", ".pdf": "pdf", ".docx": "docx",
+                      ".png": "image", ".jpg": "image", ".jpeg": "image"}
+MAX_IFC_BYTES = int(os.environ.get("BIMOFFICE_MAX_IFC_MB", "500")) * 1024 * 1024
+# tempo máximo do cálculo de quantidades pela geometria 3D (por modelo)
+IFC_GEOMETRY_SECONDS = float(os.environ.get("BIMOFFICE_IFC_GEOMETRY_SECONDS", "120"))
+JOB_MAX_ATTEMPTS = 3
+# o trabalhador de tarefas inicia junto com o servidor (testes desligam e executam manualmente)
+START_JOB_WORKER = os.environ.get("BIMOFFICE_JOB_WORKER", "1") == "1"

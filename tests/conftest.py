@@ -20,6 +20,8 @@ def isolated_data(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "BACKUPS_DIR", tmp_path / "backups")
     monkeypatch.setattr(config, "LOGS_DIR", tmp_path / "logs")
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "database" / "t.db")
+    monkeypatch.setattr(config, "PROJECT_FILES_DIR", tmp_path / "projects")
+    monkeypatch.setattr(config, "START_JOB_WORKER", False)  # testes executam a fila com jobs.run_pending()
     config.ensure_dirs()
     init_db()
 

@@ -1,0 +1,31 @@
+# Roda TODOS os testes num computador Windows (o sistema usado no SENAI),
+# para comprovar que IfcOpenShell, DOCX, PDF e a API funcionam lá — não só no Linux.
+name: Testes no Windows
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Instalar dependências (sem o modelo de IA)
+        run: pip install -r requirements.txt
+      - name: Versões
+        run: python -c "import sys, ifcopenshell; print(sys.version); print('IfcOpenShell', ifcopenshell.version)"
+      - name: Rodar testes
+        run: python -m pytest -q -rs
