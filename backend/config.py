@@ -64,5 +64,15 @@ MAX_IFC_BYTES = int(os.environ.get("BIMOFFICE_MAX_IFC_MB", "500")) * 1024 * 1024
 # tempo máximo do cálculo de quantidades pela geometria 3D (por modelo)
 IFC_GEOMETRY_SECONDS = float(os.environ.get("BIMOFFICE_IFC_GEOMETRY_SECONDS", "120"))
 JOB_MAX_ATTEMPTS = 3
+JOB_TIMEOUT_SECONDS = int(os.environ.get("BIMOFFICE_JOB_TIMEOUT_SECONDS", "3600"))   # por tarefa
+JOB_STALE_SECONDS = int(os.environ.get("BIMOFFICE_JOB_STALE_SECONDS", "300"))        # sem sinal de vida = parado
 # o trabalhador de tarefas inicia junto com o servidor (testes desligam e executam manualmente)
 START_JOB_WORKER = os.environ.get("BIMOFFICE_JOB_WORKER", "1") == "1"
+
+# ------------------------------------------------------------------ nuvem: armazenamento de arquivos
+# local (padrão) = data/documents e data/projects · s3 = objeto compatível com S3 (credenciais por variável de ambiente)
+STORAGE = os.environ.get("BIMOFFICE_STORAGE", "local").lower()
+S3_BUCKET = os.environ.get("BIMOFFICE_S3_BUCKET", "")
+S3_PREFIX = os.environ.get("BIMOFFICE_S3_PREFIX", "bimoffice/")
+S3_ENDPOINT_URL = os.environ.get("BIMOFFICE_S3_ENDPOINT_URL", "")   # ex.: https://storage.googleapis.com
+S3_REGION = os.environ.get("BIMOFFICE_S3_REGION", "")

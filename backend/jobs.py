@@ -9,12 +9,16 @@
 from __future__ import annotations
 
 import logging
+import os
+import socket
 import threading
+import time
 import traceback
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 
 from backend import config
-from backend.database.db import get_conn
+from backend.database.db import dialect, get_conn
 
 log = logging.getLogger("bimoffice.jobs")
 HANDLERS: dict[str, Callable] = {}
@@ -27,6 +31,17 @@ class JobCancelled(Exception):
     pass
 
 
+class JobTimeout(Exception):
+    pass
+
+
+WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
+
+
+def _utc(delta_seconds: float = 0) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=delta_seconds)).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def handler(kind: str):
     def deco(fn):
         HANDLERS[kind] = fn
@@ -37,11 +52,15 @@ def handler(kind: str):
 class JobContext:
     def __init__(self, job_id: int):
         self.job_id = job_id
+        self.started = time.monotonic()
 
     def progress(self, fraction: float, message: str = "") -> None:
+        """Atualiza progresso + sinal de vida. Interrompe se passar do tempo limite."""
+        if time.monotonic() - self.started > config.JOB_TIMEOUT_SECONDS:
+            raise JobTimeout(f"Tempo limite de {config.JOB_TIMEOUT_SECONDS // 60} min excedido.")
         with get_conn() as conn:
-            conn.execute("UPDATE jobs SET progress=?, message=? WHERE id=?",
-                         (max(0.0, min(1.0, fraction)), message, self.job_id))
+            conn.execute("UPDATE jobs SET progress=?, message=?, heartbeat_at=? WHERE id=?",
+                         (max(0.0, min(1.0, fraction)), message, _utc(), self.job_id))
 
     def cancelled(self) -> bool:
         with get_conn() as conn:
@@ -86,23 +105,35 @@ def cancel(job_id: int) -> dict | None:
 
 
 def recover() -> int:
-    """Ao iniciar: tarefas interrompidas voltam para a fila (ou viram erro após muitas tentativas)."""
+    """Tarefas cujo worker parou (sem sinal de vida há JOB_STALE_SECONDS) voltam para a fila,
+    ou viram erro após JOB_MAX_ATTEMPTS tentativas. Tarefas de workers vivos não são tocadas."""
+    stale = _utc(-config.JOB_STALE_SECONDS)
+    cond = "status='executando' AND (heartbeat_at IS NULL OR heartbeat_at < ?)"
     with get_conn() as conn:
-        conn.execute("""UPDATE jobs SET status='erro', finished_at=datetime('now'),
-                        error='Interrompida várias vezes (servidor reiniciado durante o processamento).'
-                        WHERE status='executando' AND attempts>=?""", (config.JOB_MAX_ATTEMPTS,))
-        n = conn.execute("""UPDATE jobs SET status='na fila', message='Retomada após reinício do servidor'
-                            WHERE status='executando'""").rowcount
+        conn.execute(f"""UPDATE jobs SET status='erro', finished_at=datetime('now'),
+                         error='Interrompida várias vezes (servidor reiniciado durante o processamento).'
+                         WHERE {cond} AND attempts>=?""", (stale, config.JOB_MAX_ATTEMPTS))
+        n = conn.execute(f"""UPDATE jobs SET status='na fila', worker_id=NULL,
+                             message='Retomada após interrupção do processamento' WHERE {cond}""", (stale,)).rowcount
     return n
 
 
 def _claim() -> dict | None:
+    if dialect() == "postgres":  # vários workers: cada tarefa é pega por um só (SKIP LOCKED)
+        with get_conn() as conn:
+            r = conn.execute("""UPDATE jobs SET status='executando', started_at=datetime('now'), attempts=attempts+1,
+                                progress=0, worker_id=?, heartbeat_at=?
+                                WHERE id = (SELECT id FROM jobs WHERE status='na fila' ORDER BY id
+                                            FOR UPDATE SKIP LOCKED LIMIT 1)
+                                RETURNING *""", (WORKER_ID, _utc())).fetchone()
+        return dict(r) if r else None
     with get_conn() as conn:
         r = conn.execute("SELECT * FROM jobs WHERE status='na fila' ORDER BY id LIMIT 1").fetchone()
         if not r:
             return None
         n = conn.execute("""UPDATE jobs SET status='executando', started_at=datetime('now'),
-                            attempts=attempts+1, progress=0 WHERE id=? AND status='na fila'""", (r["id"],)).rowcount
+                            attempts=attempts+1, progress=0, worker_id=?, heartbeat_at=?
+                            WHERE id=? AND status='na fila'""", (WORKER_ID, _utc(), r["id"])).rowcount
     return dict(r) if n else None
 
 
@@ -120,6 +151,8 @@ def run_one() -> bool:
         status, err, msg = "concluído", None, "Concluído"
     except JobCancelled:
         status, err, msg = "cancelado", None, "Cancelado pelo usuário"
+    except JobTimeout as e:
+        status, err, msg = "erro", str(e), "Tempo limite excedido"
     except Exception as e:
         log.error("Tarefa %s falhou: %s\n%s", job["id"], e, traceback.format_exc())
         status, err, msg = "erro", str(e), "Falhou"
@@ -139,10 +172,14 @@ def run_pending() -> int:
 
 
 def _loop():
+    last_recover = time.monotonic()
     while not _stop.is_set():
         try:
             while run_one() and not _stop.is_set():
                 pass
+            if time.monotonic() - last_recover > 60:  # resgata tarefas de workers que caíram
+                recover()
+                last_recover = time.monotonic()
         except Exception:
             log.exception("Erro no trabalhador de tarefas")
         _wake.wait(timeout=2.0)

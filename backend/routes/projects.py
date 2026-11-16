@@ -4,10 +4,11 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+
 from pydantic import BaseModel
 
 from backend import jobs
+from backend.storage import file_response
 from backend.projects import service as svc
 
 router = APIRouter(prefix="/api", tags=["projetos e IFC"])
@@ -129,8 +130,7 @@ def original(pid: int, fid: int, inline: bool = False):
         f = svc.get_file(fid)
         if f["project_id"] != pid:
             raise svc.NotFound("Arquivo não encontrado neste projeto.")
-        return FileResponse(svc.file_path(fid), filename=f["original_filename"], media_type=MEDIA.get(f["kind"]),
-                            content_disposition_type="inline" if inline else "attachment")
+        return file_response(svc.file_key(fid), f["original_filename"], MEDIA.get(f["kind"]), inline)
     except svc.ProjectError as e:
         raise _http(e)
 

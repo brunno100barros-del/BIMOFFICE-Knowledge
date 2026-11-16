@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+
 
 from backend import config
+from backend.storage import file_response
 from backend.schemas.document import ChunkOut, DocumentOut, DocumentUpdate, SectionOut, TextHit
 from backend.semantic_search.hybrid import index_after_change
 from backend.services import library_service as svc
@@ -100,10 +101,7 @@ def download_original(doc_id: int, inline: bool = False):
         doc = svc.get_document(doc_id)
         media = ("application/pdf" if doc["file_type"] == "pdf" else
                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        return FileResponse(
-            svc.original_path(doc_id), filename=doc["original_filename"], media_type=media,
-            content_disposition_type="inline" if inline else "attachment",
-        )
+        return file_response(svc.original_key(doc_id), doc["original_filename"], media, inline)
     except svc.LibraryError as e:
         raise _http(e)
 

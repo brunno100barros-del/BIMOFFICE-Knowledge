@@ -13,8 +13,6 @@ import json
 import logging
 import os
 import re
-import shutil
-import stat
 import tempfile
 from pathlib import Path
 from typing import BinaryIO
@@ -22,6 +20,7 @@ from typing import BinaryIO
 from backend import config, jobs
 from backend.database.db import get_conn
 from backend.ifc.inventory import build_summary
+from backend.storage import get_storage
 
 log = logging.getLogger("bimoffice.projects")
 
@@ -156,9 +155,8 @@ def store_file(pid: int, filename: str, stream: BinaryIO, discipline: str = "") 
     if not kind:
         raise InvalidFile("Tipo não aceito. Use IFC, PDF, DOCX, PNG ou JPG.")
     limit = config.MAX_IFC_BYTES if kind == "ifc" else config.MAX_UPLOAD_BYTES
-    config.PROJECT_FILES_DIR.mkdir(parents=True, exist_ok=True)
     h, size, head = hashlib.sha256(), 0, b""
-    fd, tmp = tempfile.mkstemp(dir=config.PROJECT_FILES_DIR, suffix=".part")
+    fd, tmp = tempfile.mkstemp(prefix="bimoffice_upload_", suffix=".part")  # fora da pasta de originais
     try:
         with os.fdopen(fd, "wb") as out:
             while True:
@@ -185,12 +183,9 @@ def store_file(pid: int, filename: str, stream: BinaryIO, discipline: str = "") 
             prev = conn.execute("""SELECT * FROM project_files WHERE project_id=? AND lower(original_filename)=lower(?)
                                    AND deleted_at IS NULL ORDER BY version DESC LIMIT 1""", (pid, safe)).fetchone()
         stored_rel = f"{sha}{ext}"
-        dest = config.PROJECT_FILES_DIR / stored_rel
-        if dest.exists():
-            os.unlink(tmp)  # mesmo conteúdo já guardado (outro projeto): reaproveita, não duplica no disco
-        else:
-            shutil.move(tmp, dest)
-            os.chmod(dest, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        # mesmo conteúdo já guardado (outro projeto): reaproveita, não duplica no armazenamento
+        if not get_storage().put_file(f"projects/{stored_rel}", Path(tmp)) and os.path.exists(tmp):
+            os.unlink(tmp)
         version = (prev["version"] + 1) if prev else 1
         with get_conn() as conn:
             cur = conn.execute("""INSERT INTO project_files(project_id, kind, original_filename, sha256, stored_path,
@@ -233,12 +228,21 @@ def list_files(pid: int) -> list[dict]:
     return [get_file(i) for i in ids]
 
 
-def file_path(fid: int) -> Path:
+def file_key(fid: int) -> str:
     with get_conn() as conn:
         r = conn.execute("SELECT stored_path FROM project_files WHERE id=? AND deleted_at IS NULL", (fid,)).fetchone()
     if not r:
         raise NotFound("Arquivo não encontrado.")
-    return config.PROJECT_FILES_DIR / r["stored_path"]
+    return f"projects/{r['stored_path']}"
+
+
+def file_path(fid: int) -> Path:
+    """Caminho no disco (somente armazenamento local)."""
+    from backend.storage import LocalStorage
+    st = get_storage()
+    if not isinstance(st, LocalStorage):
+        raise ProjectError("Com armazenamento em nuvem use file_key().")
+    return st.path(file_key(fid))
 
 
 def delete_file(pid: int, fid: int) -> None:
@@ -274,8 +278,9 @@ def _job_ifc_parse(job: dict, ctx: jobs.JobContext) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE project_files SET status='processando', error=NULL WHERE id=?", (fid,))
     try:
-        result = read_ifc(file_path(fid), progress=ctx.progress, should_cancel=ctx.cancelled,
-                          geometry=True, geometry_seconds=config.IFC_GEOMETRY_SECONDS)
+        with get_storage().local_path(file_key(fid)) as local:
+            result = read_ifc(local, progress=ctx.progress, should_cancel=ctx.cancelled,
+                              geometry=True, geometry_seconds=config.IFC_GEOMETRY_SECONDS)
     except Cancelled:
         with get_conn() as conn:
             conn.execute("UPDATE project_files SET status='cancelado' WHERE id=?", (fid,))

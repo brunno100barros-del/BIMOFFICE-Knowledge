@@ -12,7 +12,7 @@ from backend.database.db import init_db  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def isolated_data(tmp_path, monkeypatch):
+def isolated_data(tmp_path, monkeypatch, request):
     """Cada teste usa uma pasta de dados temporária (nunca toca em dados reais)."""
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DOCUMENTS_DIR", tmp_path / "documents")
@@ -31,6 +31,24 @@ def isolated_data(tmp_path, monkeypatch):
         with psycopg.connect(pg, autocommit=True) as c:  # banco limpo a cada teste
             c.execute("DROP SCHEMA IF EXISTS public CASCADE")
             c.execute("CREATE SCHEMA public")
+    # Para rodar a MESMA suíte com arquivos em S3 (simulado pelo moto, sem acessar a internet):
+    # BIMOFFICE_TEST_STORAGE=s3
+    if os.environ.get("BIMOFFICE_TEST_STORAGE") == "s3":
+        from moto import mock_aws
+        mock = mock_aws()
+        mock.start()
+        request.addfinalizer(mock.stop)
+        import boto3
+        from backend import storage
+        storage._cache.clear()
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "teste")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "teste")
+        boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="bimoffice-teste")
+        monkeypatch.setattr(config, "STORAGE", "s3")
+        monkeypatch.setattr(config, "S3_BUCKET", "bimoffice-teste")
+        monkeypatch.setattr(config, "S3_REGION", "us-east-1")
+    else:
+        monkeypatch.setattr(config, "STORAGE", "local")
     config.ensure_dirs()
     init_db()
 
@@ -147,3 +165,6 @@ PDF_PAGES = [
 
 requires_sqlite = pytest.mark.skipif(bool(os.environ.get("BIMOFFICE_TEST_DATABASE_URL")),
                                      reason="teste específico do arquivo SQLite")
+
+requires_local_storage = pytest.mark.skipif(os.environ.get("BIMOFFICE_TEST_STORAGE") == "s3",
+                                            reason="confere arquivos no disco local")

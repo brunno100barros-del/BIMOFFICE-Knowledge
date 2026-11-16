@@ -13,7 +13,7 @@ from backend import config, jobs  # noqa: E402
 from backend.database.db import get_conn  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.projects import service as svc  # noqa: E402
-from tests.conftest import PDF_PAGES, make_pdf  # noqa: E402
+from tests.conftest import PDF_PAGES, make_pdf, requires_local_storage  # noqa: E402
 from tests.ifc_factory import build_model  # noqa: E402
 
 SAMPLES = Path(__file__).parent / "data" / "buildingsmart"
@@ -49,6 +49,7 @@ def test_project_crud_and_history():
         svc.get_project(p["id"])
 
 
+@requires_local_storage
 def test_ifc_upload_is_processed_in_background_and_persisted(ifc4):
     p = svc.create_project("P")
     f, job = _store(p["id"], ifc4)
@@ -91,6 +92,7 @@ def test_element_filters_and_detail(ifc4):
     assert exp["format"] == "bimoffice.ifc-inventory/1" and len(exp["elements"]) == 18
 
 
+@requires_local_storage
 def test_duplicate_and_versions(tmp_path, ifc4):
     p = svc.create_project("P")
     f1, _ = _store(p["id"], ifc4)

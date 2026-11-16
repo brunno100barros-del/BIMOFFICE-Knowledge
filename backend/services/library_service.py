@@ -11,10 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 import sqlite3
-import stat
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -23,6 +21,7 @@ from pathlib import Path
 from backend import config
 from backend.database.db import dialect, get_conn
 from backend.document_processing.chunker import chunk_document
+from backend.storage import get_storage
 from backend.document_processing.docx_parser import parse_docx
 from backend.document_processing.pdf_parser import PdfWithoutText, parse_pdf
 
@@ -178,12 +177,9 @@ def import_document(filename: str, data: bytes, meta: dict,
             raise DuplicateDocument(dup["id"], dup["title"])
 
     stored_rel = f"{sha}.{file_type}"
-    stored = config.DOCUMENTS_DIR / stored_rel
-    created_file = False
-    if not stored.exists():
-        stored.write_bytes(data)
-        os.chmod(stored, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)  # somente leitura
-        created_file = True
+    key = f"documents/{stored_rel}"
+    storage = get_storage()
+    created_file = storage.put_bytes(key, data)  # somente leitura; não sobrescreve
 
     try:
         with get_conn() as conn:
@@ -205,12 +201,12 @@ def import_document(filename: str, data: bytes, meta: dict,
                 ),
             )
             doc_id = cur.lastrowid
-            _index_file(conn, doc_id, stored)
+            with storage.local_path(key) as local:
+                _index_file(conn, doc_id, local)
     except Exception:
         log.exception("Falha ao importar %s", filename)
         if created_file:  # não deixa arquivo órfão
-            os.chmod(stored, stat.S_IRUSR | stat.S_IWUSR)
-            stored.unlink(missing_ok=True)
+            storage.delete(key)
         raise
     log.info("Documento %s importado (id %s)", filename, doc_id)
     return get_document(doc_id)
@@ -306,32 +302,44 @@ def restore_document(doc_id: int) -> dict:
         if dup:
             raise DuplicateDocument(dup["id"], dup["title"])
         conn.execute("UPDATE documents SET deleted_at=NULL WHERE id=?", (doc_id,))
-        _index_file(conn, doc_id, _stored_file(doc_id))
+        with get_storage().local_path(_stored_key(doc_id)) as local:
+            _index_file(conn, doc_id, local)
     return get_document(doc_id)
 
 
 def reindex_document(doc_id: int) -> dict:
     doc = get_document(doc_id)
-    stored = _stored_file(doc_id)
-    if not stored.exists():
+    key = _stored_key(doc_id)
+    if not get_storage().exists(key):
         raise LibraryError("O arquivo original não foi encontrado em data/documents.")
     backup_database()
     with get_conn() as conn:
-        _index_file(conn, doc_id, stored)
+        with get_storage().local_path(key) as local:
+            _index_file(conn, doc_id, local)
     return get_document(doc_id)
 
 
-def _stored_file(doc_id: int) -> Path:
+def _stored_key(doc_id: int) -> str:
     with get_conn() as conn:
         r = conn.execute("SELECT stored_path FROM documents WHERE id=?", (doc_id,)).fetchone()
     if not r:
         raise NotFound("Documento não encontrado.")
-    return config.DOCUMENTS_DIR / r["stored_path"]
+    return f"documents/{r['stored_path']}"
+
+
+def original_key(doc_id: int) -> str:
+    """Chave do arquivo original no armazenamento (disco local ou S3)."""
+    get_document(doc_id)
+    return _stored_key(doc_id)
 
 
 def original_path(doc_id: int) -> Path:
-    get_document(doc_id)
-    return _stored_file(doc_id)
+    """Caminho do original no disco (somente armazenamento local)."""
+    from backend.storage import LocalStorage
+    st = get_storage()
+    if not isinstance(st, LocalStorage):
+        raise LibraryError("Com armazenamento em nuvem use original_key().")
+    return st.path(original_key(doc_id))
 
 
 def stats() -> dict:

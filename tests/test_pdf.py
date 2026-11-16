@@ -8,7 +8,7 @@ from backend.database.db import get_conn, init_db
 from backend.document_processing.pdf_parser import PdfWithoutText, parse_pdf
 from backend.semantic_search import hybrid, vector_store
 from backend.services import library_service as svc
-from tests.conftest import PDF_PAGES, make_docx, make_pdf, requires_sqlite
+from tests.conftest import PDF_PAGES, make_docx, make_pdf, requires_sqlite, requires_local_storage
 
 
 def _imp_pdf(tmp_path, name="m.pdf", pages=PDF_PAGES, **meta):
@@ -31,6 +31,7 @@ def test_parse_pdf_sections_pages_and_cleanup(tmp_path):
     assert pint.page == 3
 
 
+@requires_local_storage
 def test_import_pdf_and_search(tmp_path):
     doc, src = _imp_pdf(tmp_path, unit="Porto Velho", discipline="Arquitetura")
     assert doc["file_type"] == "pdf" and doc["source"] == "upload"

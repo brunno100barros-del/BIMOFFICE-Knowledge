@@ -6,7 +6,7 @@ import pytest
 
 from backend import config
 from backend.services import library_service as svc
-from tests.conftest import make_docx
+from tests.conftest import make_docx, requires_local_storage
 
 
 def _import(tmp_path, name="a.docx", styled=True, **meta):
@@ -23,6 +23,7 @@ def test_import_creates_document_sections_chunks(tmp_path):
     assert len(svc.list_chunks(doc["id"])) == doc["n_chunks"]
 
 
+@requires_local_storage
 def test_original_is_preserved_byte_for_byte_and_readonly(tmp_path):
     doc, src = _import(tmp_path)
     stored = svc.original_path(doc["id"])
@@ -32,6 +33,7 @@ def test_original_is_preserved_byte_for_byte_and_readonly(tmp_path):
     assert not (stored.stat().st_mode & stat.S_IWUSR)
 
 
+@requires_local_storage
 def test_reindex_and_delete_do_not_touch_original(tmp_path):
     doc, _ = _import(tmp_path)
     stored = svc.original_path(doc["id"])
@@ -91,6 +93,7 @@ def test_search_query_with_special_characters_is_safe(tmp_path):
     assert svc.search_text("   ") == []
 
 
+@requires_local_storage
 def test_delete_is_soft_and_restore_works(tmp_path):
     doc, f = _import(tmp_path)
     svc.delete_document(doc["id"])
