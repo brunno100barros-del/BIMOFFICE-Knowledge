@@ -139,8 +139,10 @@ def list_all() -> list[dict]:
                                FROM memorials m JOIN projects p ON p.id=m.project_id
                                LEFT JOIN memorial_chapters c ON c.memorial_id=m.id
                                WHERE m.deleted_at IS NULL AND p.deleted_at IS NULL
-                               GROUP BY m.id ORDER BY m.updated_at DESC, m.id DESC""").fetchall()
-    return [dict(r) for r in rows]
+                               GROUP BY m.id, p.name ORDER BY m.updated_at DESC, m.id DESC""").fetchall()
+    from backend import auth
+    allowed = auth.accessible_project_ids(auth.user())
+    return [dict(r) for r in rows if allowed is None or r["project_id"] in allowed]
 
 
 def delete_memorial(mid: int) -> None:

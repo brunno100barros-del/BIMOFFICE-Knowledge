@@ -287,7 +287,7 @@ def init_db(db_path: Path | None = None) -> None:
 _PG_NOW = "to_char(now() at time zone 'utc', 'YYYY-MM-DD HH24:MI:SS')"
 _NOCASE = re.compile(r"([\w\.]+)\s*=\s*\?\s+COLLATE NOCASE")
 _INSERT = re.compile(r"^\s*INSERT\s+INTO\s+(\w+)", re.I)
-_NO_ID_TABLES = {"schema_migrations", "project_members"}
+_NO_ID_TABLES = {"schema_migrations", "project_members"}  # tabelas sem coluna id
 
 
 def pg_sql(sql: str) -> str:

@@ -14,14 +14,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from backend import config, jobs
+from backend import auth, config, jobs
 from backend.database.db import init_db
-from backend.routes import library, memorials, projects, search
+from backend.routes import auth as auth_routes, library, memorials, projects, search
 from backend.semantic_search.providers import get_provider
 
-PUBLIC_PATHS = {"/api/health", "/api/config"}
+PUBLIC_PATHS = {"/api/health", "/api/config", "/api/auth/login"}
 
 
 def _setup_logging() -> None:
@@ -40,6 +41,7 @@ def _setup_logging() -> None:
 async def lifespan(app: FastAPI):
     _setup_logging()
     init_db()
+    auth.ensure_admin_from_env()
     if config.START_JOB_WORKER:
         jobs.start_worker()  # processamento pesado (IFC) em segundo plano
     yield
@@ -49,23 +51,47 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="BIMOFFICE Knowledge", version="0.5.0", lifespan=lifespan)
 
 
-class TokenAuthMiddleware(BaseHTTPMiddleware):
-    """Exige a senha da API (se configurada) em /api/*; nunca em pré-verificações CORS."""
+class AccessMiddleware(BaseHTTPMiddleware):
+    """Identifica o usuário, aplica as permissões (backend/auth.py) e registra a auditoria das alterações.
+
+    - Senha da API (BIMOFFICE_API_TOKEN), se definida: vale como acesso de serviço (administrador).
+    - BIMOFFICE_AUTH=on: exige sessão de login; BIMOFFICE_AUTH=off: uso local liberado.
+    """
 
     async def dispatch(self, request: Request, call_next):
-        token = config.API_TOKEN
         path = request.url.path
-        if (token and path.startswith("/api/") and path not in PUBLIC_PATHS
-                and request.method != "OPTIONS"):
-            sent = request.headers.get("authorization", "")
-            if not secrets.compare_digest(sent, f"Bearer {token}"):
-                return JSONResponse({"detail": "Acesso não autorizado: informe a senha da API."},
-                                    status_code=401)
-        return await call_next(request)
+        if not path.startswith("/api/") or path in PUBLIC_PATHS or request.method == "OPTIONS":
+            return await call_next(request)
+        sent = request.headers.get("authorization", "")
+        tok = sent.removeprefix("Bearer ").strip()
+        user = None
+        if config.API_TOKEN and secrets.compare_digest(sent, f"Bearer {config.API_TOKEN}"):
+            user = {**auth.LOCAL_USER, "email": "servico", "name": "Acesso de serviço"}
+        elif auth.enabled():
+            user = await run_in_threadpool(auth.user_from_token, tok)
+            if user is None:
+                return JSONResponse({"detail": "Faça login para continuar."}, status_code=401)
+        elif config.API_TOKEN:
+            return JSONResponse({"detail": "Acesso não autorizado: informe a senha da API."}, status_code=401)
+        else:
+            user = auth.LOCAL_USER
+        try:
+            await run_in_threadpool(auth.authorize, user, request.method, path, dict(request.query_params))
+        except auth.Forbidden as e:
+            return JSONResponse({"detail": str(e)}, status_code=403)
+        token = auth.current_user.set(user)
+        try:
+            response = await call_next(request)
+        finally:
+            auth.current_user.reset(token)
+        if request.method not in ("GET", "HEAD") and auth.enabled():
+            await run_in_threadpool(auth.audit, user.get("id"), user.get("email"), f"{request.method} {path}",
+                                    response.status_code, request.client.host if request.client else "")
+        return response
 
 
 # ordem: o último adicionado é o mais externo
-app.add_middleware(TokenAuthMiddleware)
+app.add_middleware(AccessMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
@@ -76,6 +102,7 @@ app.add_middleware(
     allow_private_network=True,
 )
 
+app.include_router(auth_routes.router)
 app.include_router(library.router)
 app.include_router(search.router)
 app.include_router(projects.router)
@@ -102,7 +129,8 @@ def public_config():
     model_dir = config.MODELS_DIR / ("models--" + get_provider().name.replace("/", "--"))
     return {
         "version": app.version,
-        "auth_required": bool(config.API_TOKEN),
+        "auth_required": bool(config.API_TOKEN) and not auth.enabled(),
+        "auth_mode": config.AUTH,
         "allowed_extensions": sorted(config.ALLOWED_EXTENSIONS),
         "max_upload_mb": config.MAX_UPLOAD_BYTES // (1024 * 1024),
         "semantic": {

@@ -74,6 +74,8 @@ def create_project(name: str, description: str = "", location: str = "",
                            (name, description.strip(), location.strip(), _j(disciplines or [])))
         pid = cur.lastrowid
         history(pid, "projeto criado", {"nome": name}, conn)
+    from backend import auth
+    auth.add_creator_as_owner(pid)  # quem cria é o dono (no uso local não há usuário)
     return get_project(pid)
 
 
@@ -92,9 +94,11 @@ def get_project(pid: int) -> dict:
 
 
 def list_projects() -> list[dict]:
+    from backend import auth
+    allowed = auth.accessible_project_ids(auth.user())
     with get_conn() as conn:
         rows = conn.execute("SELECT id FROM projects WHERE deleted_at IS NULL ORDER BY updated_at DESC, id DESC")
-        ids = [r["id"] for r in rows]
+        ids = [r["id"] for r in rows if allowed is None or r["id"] in allowed]
     return [get_project(i) for i in ids]
 
 

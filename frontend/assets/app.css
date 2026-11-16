@@ -416,3 +416,10 @@ details.card > summary::-webkit-details-marker { display: none; }
 #memChs { grid-template-columns: minmax(0, 1fr); }
 .chapter { min-width: 0; overflow-wrap: anywhere; }
 .ch-sec { overflow-x: auto; }
+
+/* ---------- login e equipe (v0.6) ---------- */
+.login-wrap { min-height: 70vh; display: grid; place-items: center; }
+.login-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: 14px; text-align: left; }
+.login-card h1 { font-size: 28px; }
+.who { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--text-2); padding: 4px 6px; }
+@media (max-width: 900px) { .who #whoName { display: none; } }

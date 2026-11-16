@@ -91,6 +91,10 @@
         try { const j = await r.json(); detail = detailText(j.detail) || detail; } catch { /* corpo não-JSON */ }
         const err = new Error(detail);
         err.status = r.status;
+        if (r.status === 401 && this.cfg && this.cfg.auth_mode === "on" && path !== "/api/auth/login") {
+          this.online = "login"; this.user = null;
+          setTimeout(() => { renderBanner(); render(); }, 0);   // sessão expirada: pede login de novo
+        }
         throw err;
       }
       return r.status === 204 ? null : r.json();
@@ -225,13 +229,20 @@
         API.cfg = await API.get("/api/config");
         API.online = true;
         if (API.cfg.auth_required && !API.token) API.online = "auth";
+        API.user = null;
+        if (API.cfg.auth_mode === "on") {
+          try { API.user = await API.get("/api/auth/me"); } catch { API.online = "login"; }
+        }
       } catch { /* offline */ }
     }
     el.classList.toggle("on", API.online === true);
     el.classList.toggle("off", API.online !== true);
     $(".conn-text", el).textContent = API.demo ? "Demonstração · projeto exemplo"
       : API.online === true ? `Backend conectado · v${API.cfg.version}`
-      : API.online === "auth" ? "Backend exige senha" : "Sem backend";
+      : API.online === "auth" ? "Backend exige senha" : API.online === "login" ? "Faça login" : "Sem backend";
+    const who = $("#who");
+    who.hidden = !API.user;
+    if (API.user) $("#whoName").textContent = `${API.user.name || API.user.email} · ${API.user.role}`;
     renderBanner();
   }
 
@@ -247,7 +258,7 @@
       $("#demoOff").onclick = async () => { Demo.set(false); await connect(); location.hash = "#/dashboard"; render(); };
       return;
     }
-    if (API.online === true) { b.innerHTML = ""; return; }
+    if (API.online === true || API.online === "login") { b.innerHTML = ""; return; }
     const pages = location.hostname.endsWith("github.io");
     b.innerHTML = `<div class="notice ${API.online === "auth" ? "err" : ""}">${icon("plug")}<div>
       ${API.online === "auth"
@@ -299,7 +310,7 @@
     const dr = document.getElementById("drawer");
     if (dr) dr.classList.remove("open");
     const r = parseHash();
-    const fn = routes[r.name] || routes.dashboard;
+    const fn = API.online === "login" ? routes.login : (routes[r.name] || routes.dashboard);
     const navName = { documento: "biblioteca", projeto: "projetos", memorial: "memoriais" }[r.name] || r.name;
     $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName));
     const view = $("#view");
@@ -668,6 +679,7 @@
         <div class="table-wrap"><table class="docs-table" id="filesTbl"><thead><tr><th>Tipo</th><th>Arquivo</th><th>Versão</th><th>Disciplina</th><th>Situação</th><th></th></tr></thead>
           <tbody>${files.length ? files.map(fileRow).join("") : `<tr><td colspan="6" class="muted">Nenhum arquivo ainda.</td></tr>`}</tbody></table></div>
       </section>
+      <section class="card" id="teamSec" hidden></section>
       <section class="card" id="memSec"><div class="page-head"><div><h2>Memoriais descritivos</h2>
         <p class="muted small">Gerados por capítulos a partir do modelo IFC (só dados do modelo) + sugestões da biblioteca de memoriais.</p></div>
         <button class="btn primary" id="genMem" ${models.length ? "" : "disabled title='Processe um modelo IFC primeiro'"}>${icon("file")}Gerar memorial descritivo</button></div>
@@ -727,6 +739,7 @@
     ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
     drop.addEventListener("drop", (e) => sendFiles(e.dataTransfer.files));
 
+    teamSection($("#teamSec"), pid).catch(() => {});
     // memoriais do projeto
     API.get(`/api/projects/${pid}/memorials`).then((ms) => {
       const box = $("#memOfProj");
@@ -1131,6 +1144,94 @@
         As credenciais ficam somente no backend, em variáveis de ambiente — nunca nesta página nem no GitHub.</p></section>`;
   };
 
+
+  // ------------------------------------------------------------------ login (nuvem)
+  routes.login = async (view) => {
+    view.innerHTML = `<div class="login-wrap"><form class="card login-card" id="loginForm">
+      <img src="assets/logo.svg" alt="" width="56" height="56"><h1>Entrar</h1>
+      <p class="muted">BIMOFFICE Knowledge · acesso restrito à equipe do SENAI/RO</p>
+      <label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+      <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">${icon("check")}Entrar</button>
+      <p class="muted small">Sem acesso? Peça ao administrador do sistema.</p></form></div>`;
+    $("#loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      f.querySelector("button").disabled = true;
+      try {
+        const r = await API.post("/api/auth/login", { email: f.email.value, password: f.password.value });
+        store.set("bimoffice-token", r.token);
+        await connect();
+        toast(`Bem-vindo(a), ${r.user.name || r.user.email}.`, "ok");
+        render();
+      } catch (err) { toast(err.message, "err"); f.querySelector("button").disabled = false; }
+    });
+  };
+  $("#logoutBtn").addEventListener("click", async () => {
+    try { await API.post("/api/auth/logout"); } catch { /* sessão já encerrada */ }
+    store.set("bimoffice-token", null);
+    await connect();
+    render();
+  });
+
+  async function adminSections(box) {
+    if (!(API.cfg && API.cfg.auth_mode === "on" && API.user && API.user.role === "admin")) { box.innerHTML = ""; return; }
+    const [users, audit] = await Promise.all([API.get("/api/users"), API.get("/api/audit?limit=40")]);
+    box.innerHTML = `<section class="card"><h2>Usuários</h2>
+      <div class="table-wrap"><table class="docs-table"><thead><tr><th>E-mail</th><th>Nome</th><th>Papel</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${users.map((u) => `<tr><td>${esc(u.email)}</td><td>${esc(u.name)}</td>
+        <td><select data-role="${u.id}">${["admin", "editor", "leitor"].map((r) => `<option ${r === u.role ? "selected" : ""}>${r}</option>`).join("")}</select></td>
+        <td>${u.active ? "ativo" : "<b>desativado</b>"}</td>
+        <td><div class="actions"><button class="btn sm" data-act-u="toggle" data-id="${u.id}" data-active="${u.active}">${u.active ? "Desativar" : "Reativar"}</button>
+        <button class="btn sm" data-act-u="pw" data-id="${u.id}">Nova senha</button></div></td></tr>`).join("")}</tbody></table></div>
+      <form id="newUser" class="form-grid" style="margin-top:12px">
+        <label>E-mail<input name="email" type="email" required></label><label>Nome<input name="name"></label>
+        <label>Senha inicial (mín. 8)<input name="password" type="password" required minlength="8"></label>
+        <label>Papel<select name="role"><option>leitor</option><option>editor</option><option>admin</option></select></label>
+        <div class="actions" style="align-self:end"><button class="btn primary">Criar usuário</button></div></form>
+      <p class="muted small" style="margin-top:8px">admin: tudo · editor: importa na biblioteca e cria projetos · leitor: só consulta. Em cada projeto, o dono define a equipe.</p></section>
+      <section class="card"><h2>Auditoria (últimas alterações)</h2><div class="table-wrap"><table class="docs-table"><thead><tr><th>Quando (UTC)</th><th>Quem</th><th>Ação</th><th>Resultado</th></tr></thead><tbody>
+      ${audit.map((a) => `<tr><td class="small">${esc(a.at)}</td><td>${esc(a.email || "—")}</td><td><code>${esc(a.action)}</code></td><td>${a.status ?? ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+    const reload = () => adminSections(box);
+    $("#newUser", box).addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try { await API.post("/api/users", Object.fromEntries(new FormData(e.target))); toast("Usuário criado.", "ok"); reload(); }
+      catch (err) { toast(err.message, "err"); }
+    });
+    const patch = (id, body) => API.req(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
+    box.addEventListener("change", async (e) => {
+      const sel = e.target.closest("[data-role]");
+      if (sel) { try { await patch(sel.dataset.role, { role: sel.value }); toast("Papel alterado.", "ok"); } catch (err) { toast(err.message, "err"); } }
+    });
+    box.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-act-u]");
+      if (!b) return;
+      try {
+        if (b.dataset.actU === "toggle") await patch(b.dataset.id, { active: b.dataset.active !== "1" });
+        if (b.dataset.actU === "pw") { const pw = prompt("Nova senha (mínimo 8 caracteres):"); if (!pw) return; await patch(b.dataset.id, { password: pw }); }
+        toast("Usuário atualizado (sessões abertas foram encerradas).", "ok"); reload();
+      } catch (err) { toast(err.message, "err"); }
+    });
+  }
+
+  async function teamSection(box, pid) {
+    if (!(API.cfg && API.cfg.auth_mode === "on")) { box.hidden = true; return; }
+    const ms = await API.get(`/api/projects/${pid}/members`);
+    box.hidden = false;
+    box.innerHTML = `<h2>Equipe do projeto</h2><p class="muted small">dono: gerencia a equipe e pode excluir · editor: altera · leitor: só consulta</p>
+      <ul class="plain">${ms.map((m) => `<li>${esc(m.name || m.email)} <span class="muted small">${esc(m.email)}</span> — <b>${esc(m.role)}</b>
+        <button class="btn sm" data-rm="${m.user_id}">${icon("x")}</button></li>`).join("")}</ul>
+      <form id="addMember" class="sug-q"><input name="email" type="email" placeholder="e-mail do usuário" required>
+        <select name="role"><option>leitor</option><option>editor</option><option>dono</option></select><button class="btn sm">Adicionar</button></form>`;
+    $("#addMember", box).addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try { await API.post(`/api/projects/${pid}/members`, Object.fromEntries(new FormData(e.target))); teamSection(box, pid); }
+      catch (err) { toast(err.message, "err"); }
+    });
+    box.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", async () => {
+      try { await API.del(`/api/projects/${pid}/members/${b.dataset.rm}`); teamSection(box, pid); } catch (err) { toast(err.message, "err"); }
+    }));
+  }
   // ------------------------------------------------------------------ Configurações
   routes.config = async (view) => {
     const theme = store.get("bimoffice-theme", "system");
@@ -1150,6 +1251,7 @@
         <div class="seg" style="margin-top:12px" id="themeSeg">
           ${THEMES.map((t) => `<button type="button" class="btn sm ${t === theme ? "primary" : ""}" data-t="${t}">${THEME_LABEL[t].replace("Tema: ", "")}</button>`).join("")}</div></section>
       <section class="card"><h2>Pesquisa semântica</h2><div id="semStatus" style="margin-top:12px"></div></section>
+      <div id="adminBox" class="grid"></div>
       <section class="card"><h2>Manutenção</h2>
         <div class="actions" style="margin-top:12px"><button class="btn" id="backupBtn" ${API.online === true ? "" : "disabled"}>${icon("restore")}Fazer backup do banco</button>
         <a class="btn" href="${esc(API.base)}/docs" target="_blank" rel="noopener" ${API.base ? "" : "hidden"}>${icon("external")}Documentação técnica da API</a></div></section>`;
@@ -1168,6 +1270,7 @@
          <dt>Formatos aceitos</dt><dd>${esc(API.cfg.allowed_extensions.join(", "))} · até ${API.cfg.max_upload_mb} MB</dd>
          <dt>Senha exigida</dt><dd>${API.cfg.auth_required ? "Sim" : "Não"}</dd></dl>`
       : `<div class="notice">${icon("alert")}<div>${API.online === "auth" ? "Backend encontrado, mas exige senha." : "Nenhum backend respondendo neste endereço."}</div></div>`;
+    adminSections($("#adminBox")).catch((e) => toast(e.message, "err"));
     const sem = $("#semStatus");
     if (API.online !== true) { sem.innerHTML = `<p class="muted">Requer backend conectado.</p>`; return; }
     try {

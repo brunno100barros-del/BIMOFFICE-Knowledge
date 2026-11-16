@@ -76,3 +76,11 @@ S3_BUCKET = os.environ.get("BIMOFFICE_S3_BUCKET", "")
 S3_PREFIX = os.environ.get("BIMOFFICE_S3_PREFIX", "bimoffice/")
 S3_ENDPOINT_URL = os.environ.get("BIMOFFICE_S3_ENDPOINT_URL", "")   # ex.: https://storage.googleapis.com
 S3_REGION = os.environ.get("BIMOFFICE_S3_REGION", "")
+
+# ------------------------------------------------------------------ nuvem: login e permissões
+# off (padrão, uso local no próprio computador) · on (nuvem: login obrigatório, equipes por projeto)
+AUTH = os.environ.get("BIMOFFICE_AUTH", "off").lower()
+SESSION_HOURS = int(os.environ.get("BIMOFFICE_SESSION_HOURS", "12"))
+# 1º administrador criado ao iniciar, se ainda não houver usuários (defina só na implantação)
+ADMIN_EMAIL = os.environ.get("BIMOFFICE_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("BIMOFFICE_ADMIN_PASSWORD", "")
