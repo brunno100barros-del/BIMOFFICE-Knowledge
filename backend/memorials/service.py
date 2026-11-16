@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from backend.database.db import get_conn
 from backend.memorials.chapters import build_all
@@ -128,6 +129,17 @@ def list_memorials(project_id: int) -> list[dict]:
                                FROM memorials m LEFT JOIN memorial_chapters c ON c.memorial_id=m.id
                                WHERE m.project_id=? AND m.deleted_at IS NULL GROUP BY m.id ORDER BY m.id DESC""",
                             (project_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_all() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute("""SELECT m.*, p.name AS project_name, COUNT(c.id) AS n_chapters,
+                               SUM(CASE WHEN c.status='aprovado' THEN 1 ELSE 0 END) AS n_approved
+                               FROM memorials m JOIN projects p ON p.id=m.project_id
+                               LEFT JOIN memorial_chapters c ON c.memorial_id=m.id
+                               WHERE m.deleted_at IS NULL AND p.deleted_at IS NULL
+                               GROUP BY m.id ORDER BY m.updated_at DESC, m.id DESC""").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -310,7 +322,12 @@ def export_docx(mid: int, draft: bool) -> tuple[bytes, str]:
                           f"({m['approved']} de {len(m['chapters'])}). Use a minuta para revisão.")
     project = projects.get_project(m["project_id"])
     data = build_docx(m, project, draft)
-    safe = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in m["title"])[:80].strip()
+    # nome de arquivo seguro em qualquer sistema: sem acentos/travessões e sem caracteres proibidos no Windows
+    import unicodedata
+    safe = unicodedata.normalize("NFKD", m["title"].replace("—", "-").replace("–", "-"))
+    safe = "".join(ch for ch in safe if not unicodedata.combining(ch))
+    safe = re.sub(r'[\\/:*?"<>|]+', "-", safe)
+    safe = re.sub(r"\s+", " ", safe)[:100].strip(" .")
     name = f"{safe}{' - MINUTA' if draft else ''}.docx"
     with get_conn() as conn:
         projects.history(m["project_id"], "memorial exportado (DOCX)",

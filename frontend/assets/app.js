@@ -32,11 +32,27 @@
     return JSON.stringify(d);
   }
 
+  // baixa um Blob com nome de arquivo (o link precisa estar na página para o navegador respeitar o nome)
+  // nome de arquivo seguro em qualquer sistema: sem acentos nem travessões (o CONTEÚDO não muda)
+  const safeFilename = (n) => String(n).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2013\u2014]/g, "-")
+    .replace(/[^\w.\-() ]+/g, "_");
+  function saveBlob(blob, filename) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = safeFilename(filename);
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 60000);
+  }
+
   function toast(msg, kind = "") {
     const el = document.createElement("div");
     el.className = `toast ${kind}`;
     el.textContent = msg;
-    $("#toasts").appendChild(el);
+    const box = $("#toasts");
+    while (box.children.length >= 3) box.firstElementChild.remove(); // no máximo 3 avisos na tela
+    box.appendChild(el);
     setTimeout(() => el.remove(), 4800);
   }
 
@@ -110,7 +126,7 @@
       if (!r.ok) throw new Error(`Erro ${r.status}`);
       const url = URL.createObjectURL(await r.blob());
       if (inline) window.open(url, "_blank", "noopener");
-      else { const a = document.createElement("a"); a.href = url; a.download = doc.original_filename || "documento"; a.click(); }
+      else saveBlob(await (await fetch(url)).blob(), doc.original_filename || "documento");
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) { toast(e.message, "err"); }
   }
@@ -186,7 +202,7 @@
     if (dr) dr.classList.remove("open");
     const r = parseHash();
     const fn = routes[r.name] || routes.dashboard;
-    const navName = r.name === "documento" ? "biblioteca" : r.name === "projeto" ? "projetos" : r.name;
+    const navName = { documento: "biblioteca", projeto: "projetos", memorial: "memoriais" }[r.name] || r.name;
     $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName));
     const view = $("#view");
     view.style.animation = "none"; void view.offsetWidth; view.style.animation = "";
@@ -327,10 +343,11 @@
       const qs = new URLSearchParams();
       new FormData(form).forEach((v, k) => v && qs.set(k, v));
       if (trash) qs.set("include_deleted", "true");
+      let docs, err;
+      try { docs = await API.get(`/api/library/documents?${qs}`); } catch (e) { err = e; }
       const box = $("#libList");
-      let docs;
-      try { docs = await API.get(`/api/library/documents?${qs}`); }
-      catch (e) { box.innerHTML = `<div class="notice err">${icon("alert")}<div>${esc(e.message)}</div></div>`; return; }
+      if (!box) return; // o usuário mudou de tela enquanto carregava
+      if (err) { box.innerHTML = `<div class="notice err">${icon("alert")}<div>${esc(err.message)}</div></div>`; return; }
       if (trash) docs = docs.filter((d) => d.deleted_at);
       if (!docs.length) {
         box.innerHTML = `<div class="card empty">${icon(trash ? "trash" : "book")}<h3>${trash ? "Lixeira vazia" : "Nenhum documento encontrado"}</h3>
@@ -553,6 +570,10 @@
         <div class="table-wrap"><table class="docs-table" id="filesTbl"><thead><tr><th>Tipo</th><th>Arquivo</th><th>Versão</th><th>Disciplina</th><th>Situação</th><th></th></tr></thead>
           <tbody>${files.length ? files.map(fileRow).join("") : `<tr><td colspan="6" class="muted">Nenhum arquivo ainda.</td></tr>`}</tbody></table></div>
       </section>
+      <section class="card" id="memSec"><div class="page-head"><div><h2>Memoriais descritivos</h2>
+        <p class="muted small">Gerados por capítulos a partir do modelo IFC (só dados do modelo) + sugestões da biblioteca de memoriais.</p></div>
+        <button class="btn primary" id="genMem" ${models.length ? "" : "disabled title='Processe um modelo IFC primeiro'"}>${icon("file")}Gerar memorial descritivo</button></div>
+        <div id="memOfProj" style="margin-top:12px"></div></section>
       <section id="inv"></section>
       <details class="card"><summary><h2 style="display:inline">Histórico do projeto</h2></summary><div id="hist" style="margin-top:12px"></div></details>`;
 
@@ -608,6 +629,23 @@
     ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
     drop.addEventListener("drop", (e) => sendFiles(e.dataTransfer.files));
 
+    // memoriais do projeto
+    API.get(`/api/projects/${pid}/memorials`).then((ms) => {
+      const box = $("#memOfProj");
+      if (!box || routeSeq !== seq) return; // o usuário já mudou de tela
+      box.innerHTML = ms.length ? `<ul class="plain">${ms.map((x) => `<li><a href="#/memorial/${x.id}">${esc(x.title)}</a>
+        <span class="muted small">· ${x.n_approved || 0} de ${x.n_chapters} capítulos aprovados · ${fmtDate(x.updated_at)}</span></li>`).join("")}</ul>`
+        : `<p class="muted small">Nenhum memorial gerado ainda.</p>`;
+    }).catch(() => {});
+    $("#genMem").addEventListener("click", async (e) => {
+      const msel = $("#modelSel");
+      const modelId = msel ? parseInt(msel.value, 10) : (models[0] && models[0].id);
+      e.currentTarget.disabled = true;
+      e.currentTarget.lastChild.textContent = "Gerando capítulos…";
+      try { const mm = await API.post(`/api/projects/${pid}/memorials`, { model_id: modelId }); toast("Memorial gerado. Revise cada capítulo.", "ok"); location.hash = `#/memorial/${mm.id}`; }
+      catch (err) { toast(err.message, "err"); render(); }
+    });
+
     // acompanhamento das tarefas (segundo plano)
     const active = files.some((f) => f.last_job && ["na fila", "executando"].includes(f.last_job.status));
     if (active) pollJobs(pid, seq);
@@ -646,7 +684,7 @@
       if (!r.ok) throw new Error(`Erro ${r.status}`);
       const blobUrl = URL.createObjectURL(await r.blob());
       if (f.kind === "pdf" || f.kind === "image") window.open(blobUrl, "_blank", "noopener");
-      else { const a = document.createElement("a"); a.href = blobUrl; a.download = f.original_filename; a.click(); }
+      else saveBlob(await (await fetch(blobUrl)).blob(), f.original_filename);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (e) { toast(e.message, "err"); }
   }
@@ -721,10 +759,8 @@
     $("#expInv").addEventListener("click", async () => {
       try {
         const data = await API.get(`/api/ifc-models/${m.id}/export`);
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-        a.download = `inventario_${m.original_filename.replace(/\.ifc$/i, "")}_v${m.version}.json`;
-        a.click();
+        saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+          `inventario_${m.original_filename.replace(/\.ifc$/i, "")}_v${m.version}.json`);
       } catch (e) { toast(e.message, "err"); }
     });
     const form = $("#elFilter");
@@ -733,8 +769,10 @@
       const qs = new URLSearchParams({ limit: "50", offset: String(offset) });
       new FormData(form).forEach((v, k) => v && qs.set(k, v));
       const box = $("#elTable");
+      if (!box) return;
       let res;
-      try { res = await API.get(`/api/ifc-models/${m.id}/elements?${qs}`); } catch (e) { box.innerHTML = `<div class="notice err">${icon("alert")}<div>${esc(e.message)}</div></div>`; return; }
+      try { res = await API.get(`/api/ifc-models/${m.id}/elements?${qs}`); } catch (e) { if (!box.isConnected) return; box.innerHTML = `<div class="notice err">${icon("alert")}<div>${esc(e.message)}</div></div>`; return; }
+      if (!box.isConnected) return; // a tela mudou enquanto carregava
       box.innerHTML = res.items.length ? `<div class="table-wrap"><table class="docs-table el-table"><thead><tr><th>Elemento</th><th>Categoria IFC</th><th>Pavimento</th><th>Disciplina</th><th>Ausente</th></tr></thead><tbody>
         ${res.items.map((x) => `<tr data-el="${x.id}" tabindex="0"><td><div class="t">${esc(x.name || "(sem nome)")}</div><div class="muted small">${esc(x.type_name || "")}</div></td>
           <td>${esc(x.ifc_class)}${x.predefined_type && x.predefined_type !== "NOTDEFINED" ? ` <span class="muted small">${esc(x.predefined_type)}</span>` : ""}</td><td>${esc(x.storey || "—")}</td>
@@ -801,6 +839,167 @@
       <div class="drawer-sec"><h3>Property Sets (${psets.length})</h3>${psets.map(([n, props]) => `<details><summary>${esc(n)}</summary><table class="docs-table"><tbody>
         ${Object.entries(props || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`).join("")}</tbody></table></details>`).join("") || `<p class="muted">Nenhum Property Set.</p>`}</div>`;
     requestAnimationFrame(() => d.classList.add("open"));
+  }
+
+  // ------------------------------------------------------------------ Memorial em elaboração
+  async function downloadExport(mid, draft) {
+    try {
+      const r = await fetch(`${API.base}/api/memorials/${mid}/export?draft=${draft}`, { headers: API.headers() });
+      if (!r.ok) { let d = `Erro ${r.status}`; try { d = detailText((await r.json()).detail) || d; } catch { /* */ } throw new Error(d); }
+      const cd = r.headers.get("content-disposition") || "";
+      const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+      saveBlob(await r.blob(), m ? decodeURIComponent(m[1]) : `memorial${draft ? "_MINUTA" : ""}.docx`);
+      toast(draft ? "Minuta exportada (marcada como não revisada)." : "Memorial final exportado.", "ok");
+    } catch (e) { toast(e.message, "err"); }
+  }
+
+  routes.memoriais = async (view) => {
+    view.innerHTML = `<div class="page-head"><div><p class="eyebrow">Memorial em elaboração</p><h1>Memoriais descritivos</h1>
+      <p class="sub">Gerados por capítulos a partir dos modelos IFC de cada projeto. Os textos de referência da biblioteca entram somente quando você escolhe; nada é exportado como final sem a sua aprovação.</p></div></div><div id="memList"></div>`;
+    if (API.online !== true) { $("#memList").innerHTML = needBackend("O memorial"); return; }
+    const list = await API.get("/api/memorials");
+    $("#memList").innerHTML = list.length ? `<div class="docs-cards">${list.map((m) => `
+      <a class="card doc proj" href="#/memorial/${m.id}"><div class="top"><span class="badge src">${icon("file")}${m.n_approved || 0} de ${m.n_chapters} aprovados</span>
+        <span class="muted small">${fmtDate(m.updated_at)}</span></div><h3>${esc(m.title)}</h3><p class="file">${esc(m.project_name)}</p></a>`).join("")}</div>`
+      : `<div class="card empty">${icon("file")}<h3>Nenhum memorial ainda</h3><p>Abra um <a href="#/projetos">projeto</a> com modelo IFC processado e clique em “Gerar memorial descritivo”.</p></div>`;
+  };
+
+  routes.memorial = async (view, r) => {
+    if (API.online !== true) { view.innerHTML = needBackend("O memorial"); return; }
+    const mid = parseInt(r.arg, 10);
+    let m = await API.get(`/api/memorials/${mid}`);
+    view.innerHTML = `
+      <div class="page-head"><div><p class="eyebrow"><a href="#/projeto/${m.project_id}">← Projeto</a> · Memorial em elaboração</p>
+        <h1 id="memTitle">${esc(m.title)}</h1><p class="sub" id="memProg"></p></div>
+        <div class="actions"><button class="btn" id="renMem">${icon("gear")}Renomear</button>
+          <button class="btn" id="expDraft">${icon("external")}Exportar minuta (DOCX)</button>
+          <button class="btn primary" id="expFinal">${icon("check")}Exportar final</button></div></div>
+      <div class="notice info">${icon("info")}<div><b>Como funciona:</b> o texto de cada capítulo foi montado <b>só com dados do modelo IFC</b> (veja “Dados do IFC usados”).
+        O que falta aparece em <b>Pendências</b>. Trechos dos memoriais de referência ficam em <b>Sugestões</b> e só entram quando você clica em “Inserir” — a origem e o texto original ficam guardados.
+        Revise, ajuste e aprove cada capítulo; a exportação final exige todos aprovados.</div></div>
+      <div class="mem-layout">
+        <nav class="card outline mem-index" aria-label="Capítulos"><h3>Capítulos</h3><ol id="memIdx"></ol>
+          <button class="btn sm" id="addCh" style="margin-top:10px">${icon("upload")}Novo capítulo</button></nav>
+        <div id="memChs" class="grid"></div>
+      </div>`;
+    const draw = () => {
+      $("#memProg").textContent = `${m.approved} de ${m.chapters.length} capítulos aprovados · atualizado ${fmtDate(m.updated_at)}`;
+      $("#expFinal").disabled = !m.ready_for_final;
+      $("#expFinal").title = m.ready_for_final ? "" : "Aprove todos os capítulos para exportar a versão final";
+      $("#memIdx").innerHTML = m.chapters.map((c, i) => `<li><a href="javascript:void 0" data-go="${c.id}"><span class="st-dot ${c.status === "aprovado" ? "ok" : ""}"></span>${i + 1} ${esc(c.title)}</a></li>`).join("");
+      $("#memChs").innerHTML = m.chapters.map((c, i) => chapterCard(c, i + 1)).join("");
+    };
+    draw();
+    const reload = async () => { m = await API.get(`/api/memorials/${mid}`); draw(); };
+    const replaceChapter = (c) => {
+      const i = m.chapters.findIndex((x) => x.id === c.id);
+      m.chapters[i] = c;
+      m.approved = m.chapters.filter((x) => x.status === "aprovado").length;
+      m.ready_for_final = m.approved === m.chapters.length;
+      const el = document.querySelector(`[data-ch="${c.id}"]`);
+      if (el) el.outerHTML = chapterCard(c, i + 1);
+      $("#memProg").textContent = `${m.approved} de ${m.chapters.length} capítulos aprovados`;
+      $("#expFinal").disabled = !m.ready_for_final;
+      const dot = document.querySelector(`[data-go="${c.id}"] .st-dot`);
+      if (dot) dot.classList.toggle("ok", c.status === "aprovado");
+    };
+    $("#expDraft").onclick = () => downloadExport(mid, true);
+    $("#expFinal").onclick = () => downloadExport(mid, false);
+    $("#renMem").onclick = async () => {
+      const t = prompt("Título do memorial:", m.title);
+      if (!t) return;
+      try { m = { ...m, ...(await API.req(`/api/memorials/${mid}`, { method: "PATCH", body: JSON.stringify({ title: t }), headers: { "Content-Type": "application/json" } })) }; $("#memTitle").textContent = m.title; }
+      catch (e) { toast(e.message, "err"); }
+    };
+    $("#addCh").onclick = async () => {
+      const t = prompt("Título do novo capítulo:");
+      if (!t) return;
+      try { await API.post(`/api/memorials/${mid}/chapters`, { title: t }); await reload(); toast("Capítulo criado no fim do memorial.", "ok"); }
+      catch (e) { toast(e.message, "err"); }
+    };
+    $("#memIdx").addEventListener("click", (e) => {
+      const a = e.target.closest("[data-go]");
+      if (a) document.querySelector(`[data-ch="${a.dataset.go}"]`).scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    const chs = $("#memChs");
+    chs.addEventListener("input", (e) => {
+      if (e.target.matches("textarea[data-text]")) {
+        const card = e.target.closest("[data-ch]");
+        $("[data-act=save]", card).disabled = false;
+        e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight + 4}px`;
+      }
+    });
+    chs.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-act]");
+      if (!b) return;
+      const card = b.closest("[data-ch]");
+      const cid = card.dataset.ch;
+      const c = m.chapters.find((x) => String(x.id) === cid);
+      const patch = (body) => API.req(`/api/memorial-chapters/${cid}`, { method: "PATCH", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
+      try {
+        switch (b.dataset.act) {
+          case "save": replaceChapter(await patch({ text: $("textarea[data-text]", card).value })); toast("Capítulo salvo (volta para rascunho até ser aprovado).", "ok"); break;
+          case "approve": replaceChapter(await API.post(`/api/memorial-chapters/${cid}/approve?approved=${c.status !== "aprovado"}`)); break;
+          case "rename": { const t = prompt("Título do capítulo:", c.title); if (t) replaceChapter(await patch({ title: t })); break; }
+          case "insert": replaceChapter(await API.post(`/api/memorial-chapters/${cid}/insert-reference?chunk_id=${b.dataset.chunk}`)); toast("Trecho inserido no fim do capítulo. Adapte o texto ao projeto e revise.", "ok"); break;
+          case "regen": {
+            const replace = c.edited && confirm("O texto deste capítulo foi editado.\n\nOK = substituir pelo texto gerado agora do IFC (o atual fica no histórico).\nCancelar = manter o seu texto e atualizar só os dados/pendências.");
+            replaceChapter(await API.post(`/api/memorial-chapters/${cid}/regenerate?replace_text=${replace}`)); toast("Capítulo regerado a partir do IFC.", "ok"); break;
+          }
+          case "sugq": { const q = $("input[data-sugq]", card).value.trim(); replaceChapter(await API.post(`/api/memorial-chapters/${cid}/suggestions?q=${encodeURIComponent(q)}`)); break; }
+          case "up": case "down": m = await API.post(`/api/memorial-chapters/${cid}/move?direction=${b.dataset.act === "up" ? -1 : 1}`); draw(); break;
+          case "del": if (confirm(`Remover o capítulo «${c.title}»? (o texto fica registrado no histórico do projeto)`)) { m = await API.del(`/api/memorial-chapters/${cid}`) || await API.get(`/api/memorials/${mid}`); await reload(); } break;
+          case "hist": {
+            const h = await API.get(`/api/memorial-chapters/${cid}/history`);
+            $(".hist-box", card).innerHTML = `<ul class="hist">${h.map((x) => `<li><span class="muted small">${esc(x.at)}</span> <b>${esc(x.event)}</b>
+              <details><summary class="small">ver texto desta versão</summary><div class="text small">${esc(x.text) || "<i>(vazio)</i>"}</div></details></li>`).join("")}</ul>`;
+            break;
+          }
+          default: break;
+        }
+      } catch (err) { toast(err.message, "err"); }
+    });
+  };
+
+  function chapterCard(c, n) {
+    const approved = c.status === "aprovado";
+    const tables = (c.tables || []).filter((t) => t.rows && t.rows.length).map((t) => `
+      <div class="table-wrap"><p class="small"><b>${esc(t.title)}</b> <span class="muted">(quadro gerado do IFC; exportado no Word)</span></p>
+      <table class="docs-table"><thead><tr>${t.columns.map((x) => `<th>${esc(x)}</th>`).join("")}</tr></thead>
+      <tbody>${t.rows.map((row) => `<tr>${row.map((x) => `<td>${esc(x)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`).join("");
+    return `<article class="card chapter ${approved ? "is-approved" : ""}" data-ch="${c.id}">
+      <header class="ch-head"><h2>${n} ${esc(c.title)}</h2>
+        <span class="badge ${approved ? "m-exp" : "m-miss"}">${approved ? "aprovado" : "rascunho"}</span>
+        ${c.edited ? `<span class="badge m-rule">adaptado pelo usuário</span>` : c.generated_text ? `<span class="badge m-geo">texto gerado do IFC</span>` : ""}
+        <span class="ch-tools">
+          <button class="icon-btn" data-act="up" title="Mover para cima" aria-label="Mover para cima">↑</button>
+          <button class="icon-btn" data-act="down" title="Mover para baixo" aria-label="Mover para baixo">↓</button>
+          <button class="icon-btn" data-act="rename" title="Renomear" aria-label="Renomear">${icon("gear")}</button>
+          ${c.key !== "custom" ? `<button class="icon-btn" data-act="regen" title="Regerar a partir do IFC" aria-label="Regerar">${icon("refresh")}</button>` : ""}
+          <button class="icon-btn" data-act="del" title="Remover capítulo" aria-label="Remover">${icon("trash")}</button></span></header>
+      <textarea data-text rows="${Math.min(22, Math.max(4, Math.ceil((c.text || "").length / 95) + (c.text || "").split("\n").length))}" placeholder="Sem texto. Redija aqui ou insira uma sugestão da biblioteca abaixo." aria-label="Texto do capítulo ${esc(c.title)}">${esc(c.text)}</textarea>
+      <div class="actions"><button class="btn sm" data-act="save" disabled>${icon("check")}Salvar texto</button>
+        <button class="btn sm ${approved ? "" : "primary"}" data-act="approve">${icon(approved ? "restore" : "check")}${approved ? "Reabrir para revisão" : "Aprovar capítulo"}</button>
+        <button class="btn sm" data-act="hist">${icon("restore")}Histórico</button></div>
+      ${tables}
+      ${c.pending && c.pending.length ? `<div class="notice"><span>${icon("alert")}</span><div><b>Pendências (informação não encontrada no IFC):</b><ul class="plain">${c.pending.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div></div>` : ""}
+      ${c.facts && c.facts.length ? `<details class="ch-sec"><summary>Dados do IFC usados (${c.facts.length})</summary>
+        <table class="docs-table"><thead><tr><th>Informação</th><th>Valor</th><th>Método</th><th>Elementos</th></tr></thead><tbody>
+        ${c.facts.map((f) => `<tr><td>${esc(f.descricao)}</td><td>${esc(f.valor)}</td><td class="small">${esc(f.metodo)}<div class="muted">${esc(f.origem)}</div></td><td>${f.elementos || "—"}</td></tr>`).join("")}</tbody></table></details>` : ""}
+      ${c.key !== "pendencias" ? `<details class="ch-sec" ${!c.text ? "open" : ""}><summary>Sugestões da biblioteca (${(c.suggestions || []).length}) — só entram se você inserir</summary>
+        <div class="sug-q"><input data-sugq value="${esc(c.query || "")}" aria-label="Buscar outras referências"><button class="btn sm" data-act="sugq">${icon("search")}Buscar</button></div>
+        ${(c.suggestions || []).map((s) => `<div class="sug"><div class="sug-meta"><b>${esc(s.document_title)}</b> › ${esc(s.section_path)}
+            <span class="badge ${s.found_by.length > 1 ? "both" : "one"}">relevância relativa ${s.relative_relevance}</span></div>
+          <div class="text small">${esc(s.text)}</div>
+          <button class="btn sm" data-act="insert" data-chunk="${s.chunk_id}">${icon("upload")}Inserir no capítulo</button></div>`).join("") || `<p class="muted small">Nenhuma sugestão (biblioteca vazia ou sem trechos parecidos).</p>`}</details>` : ""}
+      ${c.inserted_refs && c.inserted_refs.length ? `<details class="ch-sec"><summary>Trechos de referência inseridos (${c.inserted_refs.length}) — origem e texto original</summary>
+        ${c.inserted_refs.map((x) => `<div class="sug"><div class="sug-meta"><b>${esc(x.document_title)}</b> › ${esc(x.section_path)} <span class="muted small">${esc(x.original_filename || "")}${x.unit ? " · " + esc(x.unit) : ""}</span></div>
+          <div class="text small">${esc(x.original_text)}</div></div>`).join("")}</details>` : ""}
+      ${c.generated_text && c.edited ? `<details class="ch-sec"><summary>Comparar: texto gerado do IFC × texto atual</summary>
+        <div class="cmp"><div><p class="small"><b>Gerado do IFC (original)</b></p><div class="text small">${esc(c.generated_text)}</div></div>
+        <div><p class="small"><b>Atual (adaptado)</b></p><div class="text small">${esc(c.text)}</div></div></div></details>` : ""}
+      <div class="hist-box"></div>
+    </article>`;
   }
 
   // ------------------------------------------------------------------ Google Drive

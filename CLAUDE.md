@@ -29,7 +29,7 @@ Uma etapa por vez, testando antes de avançar. Ao fim de cada etapa informar: o 
 implementado, arquivos criados/modificados, como testar, limitações. Rodar `python -m pytest -q`
 antes de cada commit; commits pequenos e em português.
 
-## Estado atual (v0.4)
+## Estado atual (v0.5)
 - Backups: branches `backup/pre-ifc-2026-11-16` (antes do IFC), `backup/pre-evolucao-2026-11-13`, `backup/main-2026-11-13`.
 - v0.3 intacta: biblioteca DOCX/PDF, pesquisa híbrida E5+FTS5, interface Liquid Glass, GitHub Pages.
 - **Fase 0 (IFC) concluída:** IfcOpenShell 0.9.0.post1 (LGPL), Python 3.13; Windows testado de verdade no
@@ -44,13 +44,20 @@ antes de cada commit; commits pequenos e em português.
   de detalhes com origem. Testes: `tests/test_ifc.py`, `tests/test_projects.py`, `tests/ifc_factory.py`
   (gera IFC2X3/IFC4 com gabarito), amostras oficiais buildingSMART (CC BY 4.0) em `tests/data/`.
   IFC truncado é recusado (o IfcOpenShell sozinho aceitaria parcialmente).
-- **Pendente / depende do usuário:** memoriais e IFCs reais; chave Gemini + autorização para enviar
+- **v0.5 Memorial em elaboração (sem IA) concluído e testado (101 testes + E2E no navegador):**
+  `backend/memorials/` (chapters.py: capítulos por regras só com fatos do IFC; service.py: sugestões da
+  biblioteca NÃO inseridas, inserir guarda original+origem, edição/aprovação/histórico, regerar sem apagar
+  edição; export_docx.py: minuta marcada / final só aprovado), `backend/routes/memorials.py`, menu
+  "Memorial em elaboração" e editor. Docs: `docs/MEMORIAL.md`.
+- **Projeto exemplo** em `exemplos/` (IFC fictício 197 elementos, 3 memoriais de referência fictícios, minuta
+  produzida em `exemplos/saida/`); scripts em `scripts/exemplo/`. Sugestões certas: 16/17 capítulos no top-3.
+- **Pendente / depende do usuário:** validar o exemplo; memoriais e IFCs reais; chave Gemini + autorização para enviar
   dados ao Google (Fase 3); credenciais OAuth do Drive; servidor do backend online.
 
 ## Fases seguintes (prompt master de 2026-11-16) — ver docs/IFC.md §8
 Fase 2 consolidação (PDF/DOCX/imagens nos projetos, matriz de informações editável com histórico,
 pendências/divergências) · Fase 3 Gemini (google-genai, chave só no backend, só dados extraídos) ·
-Fase 4 memoriais por capítulo + editor + Word · Fase 5 imagens · Fase 6 Coordix (contrato
+Fase 4 memoriais (base sem IA já pronta na v0.5; falta modelo DOCX institucional) · Fase 5 imagens · Fase 6 Coordix (contrato
 `bimoffice.ifc-inventory/1`). Regras: Gemini interpreta/redige, NUNCA substitui E5+FTS5; não inventar valores.
 
 ## Etapas anteriores ainda pendentes (ordem pedida pelo usuário em 2026-11)

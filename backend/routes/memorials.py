@@ -47,6 +47,11 @@ class TitleIn(BaseModel):
     title: str
 
 
+@router.get("/memorials")
+def list_all():
+    return svc.list_all()
+
+
 @router.get("/projects/{pid}/memorials")
 def list_memorials(pid: int):
     try:

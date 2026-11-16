@@ -38,6 +38,7 @@ def base_name(name: str | None) -> str:
     n = (name or "(sem nome)").strip()
     n = re.sub(r"\s*\((?:térreo|pavimento[^)]*|cobertura)\)\s*$", "", n, flags=re.I)
     n = re.sub(r"[\s\-–—]*(?:[A-Z]{1,3}-?)?\d+[A-Z]?$", "", n).strip(" -–—")
+    n = re.sub(r"[\s\-–—]+(?:trecho|item|unidade|peça|peca)$", "", n, flags=re.I).strip(" -–—")
     return n or (name or "(sem nome)")
 
 
@@ -312,8 +313,8 @@ def _coverings(ctx, ptypes, title_word, query, note) -> dict | None:
         return None
     facts, pending = [], missing_summary(els, title_word.capitalize())
     paras = _describe_groups(_group(els, lambda e: ", ".join(mats(e)) or "material não informado"), ctx, facts, pending,
-                             lambda k, g: f"{title_word.capitalize()} em {k}: {len(g)} superfície(s) — "
-                                          + "; ".join(dict.fromkeys(e.get('name') or '' for e in g))[:300],
+                             lambda k, g: f"{k}: {len(g)} superfície(s) de {title_word} ("
+                                          + "; ".join(dict.fromkeys(e.get('name') or '' for e in g))[:300] + ")",
                              [({"NetArea", "GrossArea", "Área de projeção (malha 3D)"}, "área total", "m²")])
     pending.append(note)
     return {"paragraphs": paras, "facts": facts, "pending": pending, "tables": [], "query": query}

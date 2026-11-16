@@ -385,3 +385,34 @@ details.card > summary::-webkit-details-marker { display: none; }
   .app { grid-template-columns: minmax(0, 1fr); }
   .inv-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- memorial em elaboração (v0.5) ---------- */
+.mem-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+.mem-index { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow: auto; }
+.mem-index a { display: flex; gap: 8px; align-items: center; }
+.st-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; vertical-align: middle; border-radius: 50%; background: var(--warn); flex-shrink: 0; }
+.st-dot.ok { background: var(--ok); }
+.chapter { background: var(--solid); display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 20px; }
+.chapter.is-approved { box-shadow: var(--glass-shadow), inset 4px 0 0 var(--ok); }
+.ch-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ch-head h2 { font-size: 19px; }
+.ch-tools { margin-left: auto; display: flex; gap: 6px; }
+.chapter textarea { font: inherit; font-size: 15.5px; line-height: 1.65; resize: vertical; min-height: 90px; color: var(--text); background: var(--bg); }
+.ch-sec { border-top: 1px solid var(--line); padding-top: 10px; }
+.ch-sec > summary { cursor: pointer; font-weight: 600; color: var(--text-2); }
+.ch-sec .docs-table { margin-top: 8px; }
+.sug { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.sug-meta { font-size: 13px; color: var(--text-2); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sug .text, .cmp .text { white-space: pre-line; line-height: 1.55; }
+.sug-q { display: flex; gap: 8px; margin-top: 10px; }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 8px; }
+.cmp > div { border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.notice ul.plain { margin-top: 4px; }
+@media (max-width: 900px) {
+  .mem-layout { grid-template-columns: minmax(0, 1fr); }
+  .mem-index { position: static; max-height: 240px; }
+  .cmp { grid-template-columns: 1fr; }
+}
+#memChs { grid-template-columns: minmax(0, 1fr); }
+.chapter { min-width: 0; overflow-wrap: anywhere; }
+.ch-sec { overflow-x: auto; }

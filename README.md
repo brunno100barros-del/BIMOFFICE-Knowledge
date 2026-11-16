@@ -1,7 +1,9 @@
 # BIMOFFICE Knowledge
 
 Biblioteca inteligente de memoriais descritivos (SENAI) com pesquisa semântica local.
-Status: **v0.4** — **projetos com leitura de modelos IFC** (IFC2X3/IFC4/IFC4X3), biblioteca DOCX e PDF, pesquisa híbrida (E5 + FTS5) e interface web Liquid Glass.
+Status: **v0.5** — **memorial descritivo gerado a partir do IFC** (por capítulos, com sugestões da biblioteca, revisão e Word), projetos com leitura de IFC, biblioteca DOCX/PDF, pesquisa híbrida (E5 + FTS5) e interface Liquid Glass.
+
+**Projeto exemplo pronto para testar:** veja [exemplos/LEIA-ME.md](exemplos/LEIA-ME.md) (IFC modelo, 3 memoriais de referência e o memorial produzido).
 
 ![Dashboard](docs/img/dashboard-claro.png)
 
@@ -29,6 +31,15 @@ python -m pytest -q
 - Divisão em trechos respeitando seções
 - SQLite + FTS5 (busca por palavras, ignora acentos)
 - Filtros, edição de metadados, exclusão lógica (lixeira) + restauração, reindexação, backup
+
+## Memorial em elaboração (v0.5)
+- Na página do projeto: **Gerar memorial descritivo**. Os capítulos são montados **só com dados do IFC**
+  (cada número com a origem); o que falta vira **pendência**.
+- Cada capítulo traz **sugestões da biblioteca** (pesquisa semântica): só entram se você clicar em **Inserir**;
+  a origem e o texto original ficam guardados.
+- Editar, reordenar, renomear, criar e remover capítulos; histórico de versões; comparar gerado × atual.
+- **Exportar minuta (DOCX)** a qualquer momento; **exportar final** só com todos os capítulos aprovados.
+- Detalhes: [docs/MEMORIAL.md](docs/MEMORIAL.md). Ainda **sem Gemini** (próxima fase).
 
 ## Projetos e leitor IFC (v0.4)
 - Menu **Projetos (IFC)**: crie um projeto e envie vários arquivos (IFC, PDF, DOCX, PNG/JPG) de uma vez.
@@ -78,7 +89,7 @@ python -m pytest -q
 ## Limitações conhecidas
 - Numeração automática do Word não é lida; cabeçalhos/rodapés/caixas de texto não são indexados.
 - Página do trecho é apenas ESTIMADA (o DOCX não guarda paginação).
-- Ainda não existem: Google Drive, Gemini, backend online, leitura de PDF/DOCX/imagens **dentro de projetos**, matriz de informações editável, editor do memorial e exportação DOCX.
+- Ainda não existem: Google Drive, Gemini, backend online, leitura de PDF/DOCX/imagens **dentro de projetos**, matriz de informações editável, modelo DOCX institucional e imagens no memorial.
 - IFC: só `.ifc` (STEP); IFCZIP/ifcXML e DWG ainda não (veja docs/IFC.md).
 - Busca por palavras não reconhece plural/singular ("elétrico" ≠ "elétricos"); a semântica cobre.
 - Qualidade medida em 10 paráfrases técnicas sem palavras em comum: 8/10 em 1º lugar, todas no
