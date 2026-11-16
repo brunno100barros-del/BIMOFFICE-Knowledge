@@ -8,6 +8,17 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 SUM_UNITS = {"m", "m²", "m³", "kg", "un"}
+# medidas lineares que SOMAM com sentido (comprimento total de paredes, perímetros).
+# Altura, largura, espessura, profundidade NÃO são somadas (0,14 + 0,14 m de espessura não é 0,28 m).
+ADDITIVE_LENGTHS = {"Length", "Perimeter", "GrossPerimeter", "NetPerimeter"}
+
+
+def _additive(q: dict) -> bool:
+    if q.get("unit") not in SUM_UNITS or not isinstance(q.get("value"), (int, float)):
+        return False
+    if (q.get("note") or "").startswith("unidade própria"):
+        return False
+    return q["unit"] != "m" or q.get("name") in ADDITIVE_LENGTHS
 
 
 def build_summary(result: dict) -> dict:
@@ -26,8 +37,7 @@ def build_summary(result: dict) -> dict:
             materials[name]["elements"] += 1
             materials[name]["classes"][e["ifc_class"]] += 1
         for q in e.get("quantities") or []:
-            if q.get("unit") in SUM_UNITS and isinstance(q.get("value"), (int, float)) and not (q.get("note") or "") \
-                    .startswith("unidade própria"):
+            if _additive(q):
                 k = (e["ifc_class"], q["name"], q["unit"], q["method"])
                 t = totals.setdefault(k, {"ifc_class": k[0], "quantity": k[1], "unit": k[2], "method": k[3],
                                           "total": 0.0, "elements": 0})
@@ -54,5 +64,7 @@ def build_summary(result: dict) -> dict:
         "read_errors": sum(1 for e in els if e.get("read_error")),
         "geometry": result.get("geometry"),
         "warnings": result.get("warnings", []),
-        "totals_method": "Somatório por regra dos valores de cada elemento, separado por método de origem.",
+        "totals_method": "Somatório por regra dos valores de cada elemento, separado por método de origem. "
+                         "Só quantidades aditivas (área, volume, comprimento, massa, contagem); "
+                         "alturas, larguras e espessuras não são somadas.",
     }

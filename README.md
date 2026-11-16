@@ -1,7 +1,7 @@
 # BIMOFFICE Knowledge
 
 Biblioteca inteligente de memoriais descritivos (SENAI) com pesquisa semântica local.
-Status: **v0.3** — biblioteca DOCX **e PDF**, pesquisa híbrida (E5 + FTS5) e **interface web Liquid Glass**.
+Status: **v0.4** — **projetos com leitura de modelos IFC** (IFC2X3/IFC4/IFC4X3), biblioteca DOCX e PDF, pesquisa híbrida (E5 + FTS5) e interface web Liquid Glass.
 
 ![Dashboard](docs/img/dashboard-claro.png)
 
@@ -29,6 +29,19 @@ python -m pytest -q
 - Divisão em trechos respeitando seções
 - SQLite + FTS5 (busca por palavras, ignora acentos)
 - Filtros, edição de metadados, exclusão lógica (lixeira) + restauração, reindexação, backup
+
+## Projetos e leitor IFC (v0.4)
+- Menu **Projetos (IFC)**: crie um projeto e envie vários arquivos (IFC, PDF, DOCX, PNG/JPG) de uma vez.
+- O IFC é lido **em segundo plano** (barra de progresso, cancelar, retoma após reinício) com o IfcOpenShell.
+- **Inventário técnico** persistido: elementos, categorias, disciplinas, pavimentos, materiais,
+  quantidades e **informações ausentes**. Cada valor mostra a **origem**: explícito no IFC, atributo,
+  calculado pela geometria 3D ou não encontrado. Nada é inventado.
+- Classificação por disciplina por regras explicáveis — **o nome sozinho nunca classifica**.
+- Arquivos repetidos são recusados; mesmo nome com conteúdo novo vira **nova versão**.
+- Exportação do inventário em JSON (`bimoffice.ifc-inventory/1`) para integrações (Coordix).
+- Detalhes técnicos, compatibilidade (Windows testado), banco e API: [docs/IFC.md](docs/IFC.md).
+
+![Inventário IFC](docs/img/inventario-ifc.png)
 
 ## Interface (v0.3)
 - Menu lateral: Dashboard, Biblioteca de memoriais, Pesquisa semântica, Google Drive, Configurações.
@@ -65,7 +78,8 @@ python -m pytest -q
 ## Limitações conhecidas
 - Numeração automática do Word não é lida; cabeçalhos/rodapés/caixas de texto não são indexados.
 - Página do trecho é apenas ESTIMADA (o DOCX não guarda paginação).
-- Ainda não existem: Google Drive, backend online, editor do memorial em elaboração e exportação DOCX.
+- Ainda não existem: Google Drive, Gemini, backend online, leitura de PDF/DOCX/imagens **dentro de projetos**, matriz de informações editável, editor do memorial e exportação DOCX.
+- IFC: só `.ifc` (STEP); IFCZIP/ifcXML e DWG ainda não (veja docs/IFC.md).
 - Busca por palavras não reconhece plural/singular ("elétrico" ≠ "elétricos"); a semântica cobre.
 - Qualidade medida em 10 paráfrases técnicas sem palavras em comum: 8/10 em 1º lugar, todas no
   top 3 (só a parte semântica). Ainda NÃO medida com memoriais reais.

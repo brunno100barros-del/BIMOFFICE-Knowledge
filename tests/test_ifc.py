@@ -168,3 +168,12 @@ def test_larger_model_is_read(tmp_path):
     assert r["parse_seconds"] < 60
     s = build_summary(r)
     assert s["classes"]["IfcWall"] == 1504
+
+
+def test_non_additive_dimensions_are_not_summed(model):
+    _, r = model
+    s = build_summary(r)
+    names = {t["quantity"] for t in s["quantity_totals"]}
+    assert "Length" in names                       # comprimento total de paredes faz sentido
+    for bad in ("Height", "Width", "Espessura (camadas de material)", "OverallHeight", "OverallWidth"):
+        assert bad not in names, bad               # somar espessuras/alturas não faz sentido

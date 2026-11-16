@@ -29,26 +29,31 @@ Uma etapa por vez, testando antes de avançar. Ao fim de cada etapa informar: o 
 implementado, arquivos criados/modificados, como testar, limitações. Rodar `python -m pytest -q`
 antes de cada commit; commits pequenos e em português.
 
-## Estado atual (v0.3)
-- Backup antes da evolução: branch `backup/pre-evolucao-2026-11-13` (e `backup/main-2026-11-13`, mais antigo).
-- **Biblioteca + pesquisa** (Etapas 1–2 originais) CONCLUÍDAS e verificadas; 55 testes (3 usam o modelo real).
-- **PDF**: `pdf_parser.py` (pypdf, BSD) gera o mesmo ParsedDocument do DOCX; página real em `Block.page`;
-  PDF sem texto → `PdfWithoutText` → 400 com aviso; sem OCR (interface `OcrProvider` reservada).
-- **Banco**: migração automática em `db._migrate` (colunas `file_type`, `source`, `source_ref`).
-- **API nova**: `/api/library/stats`, `/api/config`, original com `?inline=true`, filtro `file_type`;
-  CORS (`BIMOFFICE_CORS_ORIGINS`, inclui GitHub Pages; `allow_private_network`); senha opcional
-  `BIMOFFICE_API_TOKEN` (Bearer; públicos: /api/health e /api/config).
-- **Interface** `frontend/` (HTML/CSS/JS puro, sem dependências externas): servida pelo backend em `/`;
-  hash-router; modo demonstração honesto sem backend; testada ponta a ponta com Playwright
-  (importação múltipla DOCX+PDF, erros individuais, duplicado, filtros, documento, pesquisa E5,
-  copiar com origem, excluir/restaurar, temas, celular, frontend separado via CORS).
-- **GitHub Pages**: `.github/workflows/pages.yml` (testes → checagem de segredos → publica `frontend/`).
-  Requer o usuário ativar Settings → Pages → Source: GitHub Actions; workflow só roda na `main`.
-- **Documentação**: `docs/PUBLICACAO.md` (arquitetura, Pages, backend online, Drive).
-- **Pendente / depende do usuário**: memoriais reais em `amostras/`; credenciais OAuth do Google (Drive);
-  escolha do servidor do backend online.
+## Estado atual (v0.4)
+- Backups: branches `backup/pre-ifc-2026-11-16` (antes do IFC), `backup/pre-evolucao-2026-11-13`, `backup/main-2026-11-13`.
+- v0.3 intacta: biblioteca DOCX/PDF, pesquisa híbrida E5+FTS5, interface Liquid Glass, GitHub Pages.
+- **Fase 0 (IFC) concluída:** IfcOpenShell 0.9.0.post1 (LGPL), Python 3.13; Windows testado de verdade no
+  GitHub Actions (`.github/workflows/testes-windows.yml`, Python 3.12/3.13). Resultados em `docs/IFC.md`.
+- **Fase 1 concluída e testada (91 testes):**
+  `backend/ifc/` (reader: elementos, psets, Qto em SI, materiais, sistemas, classificação, geometria
+  só do que falta com método registrado; classify: disciplina por regras, nome = só sugestão;
+  inventory: resumo, somas só de medidas aditivas e por método), `backend/jobs.py` (fila persistida,
+  trabalhador em thread, progresso, cancelamento, retomada), `backend/projects/service.py`
+  (projetos, upload em partes, duplicados, versões, histórico), `backend/routes/projects.py`.
+  Interface: menu Projetos (IFC), envio múltiplo, progresso, inventário, tabela de elementos e painel
+  de detalhes com origem. Testes: `tests/test_ifc.py`, `tests/test_projects.py`, `tests/ifc_factory.py`
+  (gera IFC2X3/IFC4 com gabarito), amostras oficiais buildingSMART (CC BY 4.0) em `tests/data/`.
+  IFC truncado é recusado (o IfcOpenShell sozinho aceitaria parcialmente).
+- **Pendente / depende do usuário:** memoriais e IFCs reais; chave Gemini + autorização para enviar
+  dados ao Google (Fase 3); credenciais OAuth do Drive; servidor do backend online.
 
-## Etapas restantes (ordem pedida pelo usuário em 2026-11)
+## Fases seguintes (prompt master de 2026-11-16) — ver docs/IFC.md §8
+Fase 2 consolidação (PDF/DOCX/imagens nos projetos, matriz de informações editável com histórico,
+pendências/divergências) · Fase 3 Gemini (google-genai, chave só no backend, só dados extraídos) ·
+Fase 4 memoriais por capítulo + editor + Word · Fase 5 imagens · Fase 6 Coordix (contrato
+`bimoffice.ifc-inventory/1`). Regras: Gemini interpreta/redige, NUNCA substitui E5+FTS5; não inventar valores.
+
+## Etapas anteriores ainda pendentes (ordem pedida pelo usuário em 2026-11)
 5. Google Drive: OAuth 2.0 (drive.readonly), escolher pasta, listar, importar manual, sincronizar manual
    (novos/modificados, sem duplicar; origem em `source_ref`). **Aguarda credenciais do usuário.**
 6. Backend online: hospedagem com disco persistente, HTTPS, `BIMOFFICE_API_TOKEN`, CORS. **Aguarda decisão.**
@@ -59,4 +64,4 @@ Fora do escopo do MVP: orçamento, clashes, Digital Twin, fotos, contratos, ativ
 
 ## Comandos
 - Instalar/rodar: `iniciar.bat` (Windows) ou `./iniciar.sh` · API: http://127.0.0.1:8000/docs
-- Testes: `python -m pytest -q`
+- Testes: `python -m pytest -q` (IFC: `tests/test_ifc.py`, `tests/test_projects.py`)

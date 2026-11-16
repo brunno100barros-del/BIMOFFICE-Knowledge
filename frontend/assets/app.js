@@ -23,6 +23,15 @@
     : "Upload manual";
   const STOP = new Set("a o os as de da do das dos e em no na nos nas um uma com para por que se ser será serão são sobre entre".split(" "));
 
+  // mensagens de erro da API: texto simples, {message: ...} ou lista de validação
+  function detailText(d) {
+    if (!d) return "";
+    if (typeof d === "string") return d;
+    if (d.message) return d.message;
+    if (Array.isArray(d)) return d.map((x) => x.msg || JSON.stringify(x)).join("; ");
+    return JSON.stringify(d);
+  }
+
   function toast(msg, kind = "") {
     const el = document.createElement("div");
     el.className = `toast ${kind}`;
@@ -60,7 +69,7 @@
       }
       if (!r.ok) {
         let detail = `Erro ${r.status}`;
-        try { const j = await r.json(); detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail); } catch { /* corpo não-JSON */ }
+        try { const j = await r.json(); detail = detailText(j.detail) || detail; } catch { /* corpo não-JSON */ }
         const err = new Error(detail);
         err.status = r.status;
         throw err;
@@ -71,13 +80,13 @@
     post(p, body) { return this.req(p, { method: "POST", ...(body ? { body: JSON.stringify(body), headers: { "Content-Type": "application/json" } } : {}) }); },
     del(p) { return this.req(p, { method: "DELETE" }); },
     originalUrl(id, inline) { return `${this.base}/api/library/documents/${id}/original${inline ? "?inline=true" : ""}`; },
-    upload(file, meta, onProgress) {
+    upload(file, meta, onProgress, path = "/api/library/documents") {
       return new Promise((resolve, reject) => {
         const fd = new FormData();
         fd.append("file", file, file.name);
         Object.entries(meta).forEach(([k, v]) => v && fd.append(k, v));
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", `${this.base}/api/library/documents`);
+        xhr.open("POST", this.base + path);
         if (this.token) xhr.setRequestHeader("Authorization", `Bearer ${this.token}`);
         xhr.upload.onprogress = (e) => e.lengthComputable && onProgress("upload", e.loaded / e.total);
         xhr.upload.onload = () => onProgress("processing", 1);
@@ -85,7 +94,7 @@
           let j = null;
           try { j = JSON.parse(xhr.responseText); } catch { /* vazio */ }
           if (xhr.status >= 200 && xhr.status < 300) resolve(j);
-          else reject(new Error((j && j.detail) || `Erro ${xhr.status}`));
+          else reject(new Error(detailText(j && j.detail) || `Erro ${xhr.status}`));
         };
         xhr.onerror = () => reject(new Error("Falha de conexão com o backend."));
         xhr.send(fd);
@@ -164,6 +173,7 @@
 
   // ------------------------------------------------------------------ roteador
   const routes = {};
+  let routeSeq = 0; // muda a cada navegação (para parar atualizações automáticas da tela anterior)
   function parseHash() {
     const h = location.hash.replace(/^#\/?/, "") || "dashboard";
     const [path, qs] = h.split("?");
@@ -171,9 +181,12 @@
     return { name, arg, params: new URLSearchParams(qs || "") };
   }
   async function render() {
+    routeSeq++;
+    const dr = document.getElementById("drawer");
+    if (dr) dr.classList.remove("open");
     const r = parseHash();
     const fn = routes[r.name] || routes.dashboard;
-    const navName = r.name === "documento" ? "biblioteca" : r.name;
+    const navName = r.name === "documento" ? "biblioteca" : r.name === "projeto" ? "projetos" : r.name;
     $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName));
     const view = $("#view");
     view.style.animation = "none"; void view.offsetWidth; view.style.animation = "";
@@ -471,6 +484,324 @@
       }
     });
   };
+
+  // ------------------------------------------------------------------ Projetos (IFC)
+  const DISCS = ["Arquitetura", "Estrutura", "Estrutura metálica", "Hidrossanitário", "Elétrica", "Climatização", "Instalações (indefinida)", "Outros", "Pendente"];
+  const FILE_DISCS = ["", "Arquitetura", "Estrutura", "Estrutura metálica", "Hidrossanitário", "Elétrica", "Climatização", "Outras"];
+  const fmtNum = (v, d = 2) => (typeof v === "number" ? v.toLocaleString("pt-BR", { maximumFractionDigits: d }) : "—");
+  const fmtSize = (b) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+  const METHOD = {
+    explicito: ["Explícito no IFC", "m-exp"], atributo: ["Atributo do elemento", "m-exp"],
+    geometrico: ["Calculado pela geometria", "m-geo"], regra: ["Calculado por regra", "m-rule"],
+  };
+  const methodBadge = (m) => { const [l, c] = METHOD[m] || [m, ""]; return `<span class="badge ${c}">${esc(l)}</span>`; };
+  const STATUS_CLS = { "explícito": "m-exp", "calculado": "m-geo", "não encontrado": "m-miss" };
+  const confBadge = (c) => `<span class="badge conf-${c === "alta" ? "hi" : c === "média" ? "mid" : "lo"}">confiança ${esc(c)}</span>`;
+
+  routes.projetos = async (view) => {
+    view.innerHTML = `
+      <div class="page-head"><div><p class="eyebrow">Projetos</p><h1>Projetos de engenharia</h1>
+        <p class="sub">Reúna os arquivos de cada obra (IFC, PDF, DOCX e imagens). Os modelos IFC são lidos automaticamente e viram um inventário técnico com a origem de cada informação.</p></div></div>
+      <form class="card" id="newProj"><h2>Novo projeto</h2>
+        <div class="form-grid" style="margin-top:12px">
+          <label>Nome do projeto *<input name="name" required placeholder="ex.: Reforma do Bloco de Salas"></label>
+          <label>Localização<input name="location" placeholder="ex.: SENAI Porto Velho/RO"></label>
+          <label>Descrição<input name="description" placeholder="opcional"></label>
+          <div class="actions" style="align-self:end"><button class="btn primary" ${API.online === true ? "" : "disabled"}>${icon("cube")}Criar projeto</button></div>
+        </div></form>
+      <div id="projList"></div>`;
+    if (API.online !== true) { $("#projList").innerHTML = needBackend("Os projetos"); return; }
+    $("#newProj").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = Object.fromEntries(new FormData(e.target));
+      try { const p = await API.post("/api/projects", fd); toast("Projeto criado.", "ok"); location.hash = `#/projeto/${p.id}`; }
+      catch (err) { toast(err.message, "err"); }
+    });
+    const list = await API.get("/api/projects");
+    $("#projList").innerHTML = list.length ? `<div class="docs-cards">${list.map((p) => `
+      <a class="card doc proj" href="#/projeto/${p.id}">
+        <div class="top"><span class="badge src">${icon("cube")}${p.ifc_models} modelo(s) IFC</span><span class="muted small">${fmtDate(p.updated_at)}</span></div>
+        <h3>${esc(p.name)}</h3>
+        <p class="file">${esc(p.location || "Sem localização")}</p>
+        ${p.description ? `<p class="muted small">${esc(p.description)}</p>` : ""}
+        <div class="chips">${Object.entries(p.file_counts).map(([k, n]) => `<span class="chip">${n} ${esc(k.toUpperCase())}</span>`).join("") || `<span class="chip">sem arquivos</span>`}</div>
+      </a>`).join("")}</div>`
+      : `<div class="card empty">${icon("cube")}<h3>Nenhum projeto ainda</h3><p>Crie o primeiro projeto acima e envie os modelos IFC.</p></div>`;
+  };
+
+  routes.projeto = async (view, r) => {
+    if (API.online !== true) { view.innerHTML = needBackend("O projeto"); return; }
+    const pid = parseInt(r.arg, 10);
+    const seq = routeSeq;
+    const [p, files, models] = await Promise.all([
+      API.get(`/api/projects/${pid}`), API.get(`/api/projects/${pid}/files`), API.get(`/api/projects/${pid}/ifc-models`),
+    ]);
+    const selModel = models.find((m) => String(m.id) === r.params.get("modelo")) || models[0];
+    view.innerHTML = `
+      <div class="page-head"><div><p class="eyebrow"><a href="#/projetos">← Projetos</a></p><h1>${esc(p.name)}</h1>
+        <p class="sub">${esc([p.location, p.description].filter(Boolean).join(" · ") || "Sem descrição")}</p></div>
+        <div class="actions"><button class="btn danger" id="delProj">${icon("trash")}Excluir projeto</button></div></div>
+      <section class="card">
+        <div class="page-head"><h2>Arquivos do projeto</h2><span class="muted small">IFC até ${API.cfg.ifc && API.cfg.ifc.max_mb || "?"} MB · PDF/DOCX/imagem até ${API.cfg.max_upload_mb} MB</span></div>
+        ${API.cfg.ifc && !API.cfg.ifc.available ? `<div class="notice err" style="margin-top:12px">${icon("alert")}<div><b>Leitor IFC indisponível neste backend:</b> ${esc(API.cfg.ifc.reason)}</div></div>` : ""}
+        <div class="up-row">
+          <label class="drop small-drop" id="pDrop"><input type="file" id="pFiles" multiple accept=".ifc,.pdf,.docx,.png,.jpg,.jpeg">
+            ${icon("upload")}<strong>Arraste IFC, PDF, DOCX ou imagens</strong><span>vários de uma vez · DWG: exporte como IFC/PDF</span></label>
+          <label>Disciplina dos arquivos (opcional)<select id="pDisc">${FILE_DISCS.map((d) => `<option value="${esc(d)}">${d || "— não informar —"}</option>`).join("")}</select></label>
+        </div>
+        <ul class="up-list" id="pUp"></ul>
+        <div class="table-wrap"><table class="docs-table" id="filesTbl"><thead><tr><th>Tipo</th><th>Arquivo</th><th>Versão</th><th>Disciplina</th><th>Situação</th><th></th></tr></thead>
+          <tbody>${files.length ? files.map(fileRow).join("") : `<tr><td colspan="6" class="muted">Nenhum arquivo ainda.</td></tr>`}</tbody></table></div>
+      </section>
+      <section id="inv"></section>
+      <details class="card"><summary><h2 style="display:inline">Histórico do projeto</h2></summary><div id="hist" style="margin-top:12px"></div></details>`;
+
+    $("#delProj").addEventListener("click", async () => {
+      if (!confirm(`Excluir o projeto «${p.name}»? Os arquivos originais continuam guardados.`)) return;
+      try { await API.del(`/api/projects/${pid}`); toast("Projeto excluído.", "ok"); location.hash = "#/projetos"; } catch (e) { toast(e.message, "err"); }
+    });
+    $("details.card").addEventListener("toggle", async (e) => {
+      if (!e.target.open) return;
+      const h = await API.get(`/api/projects/${pid}/history`);
+      $("#hist").innerHTML = `<ul class="hist">${h.map((x) => `<li><span class="muted small">${esc(x.at)}</span> <b>${esc(x.event)}</b>
+        <span class="muted small">${esc(Object.entries(x.detail).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · "))}</span></li>`).join("")}</ul>`;
+    });
+
+    // ações dos arquivos
+    $("#filesTbl").addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-f]");
+      if (!b) return;
+      const fid = b.dataset.id;
+      const f = files.find((x) => String(x.id) === fid);
+      try {
+        if (b.dataset.f === "orig") await openProjectFile(pid, f);
+        if (b.dataset.f === "cancel") { await API.post(`/api/jobs/${b.dataset.job}/cancel`); toast("Cancelamento solicitado."); }
+        if (b.dataset.f === "reproc") { await API.post(`/api/projects/${pid}/files/${fid}/reprocess`); toast("Reprocessamento na fila.", "ok"); render(); }
+        if (b.dataset.f === "del" && confirm(`Remover «${f.original_filename}» do projeto?`)) { await API.del(`/api/projects/${pid}/files/${fid}`); toast("Arquivo removido.", "ok"); render(); }
+      } catch (err) { toast(err.message, "err"); }
+    });
+
+    // envio de vários arquivos
+    const drop = $("#pDrop");
+    const sendFiles = async (list) => {
+      const items = [...list].map((file) => ({ file, msg: "Aguardando", state: "wait", pct: 0 }));
+      const draw = () => { $("#pUp").innerHTML = items.map((q) => `<li class="up-item ${q.state}">${icon(q.state === "ok" ? "check" : q.state === "err" ? "alert" : "file")}
+        <span class="name">${esc(q.file.name)}</span><span class="muted small">${fmtSize(q.file.size)}</span>
+        <span class="progress"><i class="${q.indet ? "indet" : ""}" style="width:${q.indet ? "" : Math.round(q.pct * 100) + "%"}"></i></span><span class="st">${esc(q.msg)}</span></li>`).join(""); };
+      draw();
+      for (const q of items) {
+        q.state = "busy"; draw();
+        try {
+          const res = await API.upload(q.file, { discipline: $("#pDisc").value }, (phase, pct) => {
+            if (phase === "upload") { q.pct = pct; q.msg = `Enviando… ${Math.round(pct * 100)}%`; } else { q.indet = true; q.msg = "Conferindo o arquivo…"; }
+            draw();
+          }, `/api/projects/${pid}/files`);
+          q.state = "ok"; q.indet = false; q.pct = 1;
+          q.msg = res.job ? `Recebido (versão ${res.file.version}). Leitura do IFC em segundo plano — acompanhe na tabela.` : `Recebido (versão ${res.file.version}) e guardado no projeto.`;
+        } catch (err) { q.state = "err"; q.indet = false; q.msg = err.message; }
+        draw();
+      }
+      setTimeout(() => routeSeq === seq && render(), 600);
+    };
+    $("#pFiles").addEventListener("change", (e) => { sendFiles(e.target.files); e.target.value = ""; });
+    ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => sendFiles(e.dataTransfer.files));
+
+    // acompanhamento das tarefas (segundo plano)
+    const active = files.some((f) => f.last_job && ["na fila", "executando"].includes(f.last_job.status));
+    if (active) pollJobs(pid, seq);
+
+    // inventário IFC
+    const inv = $("#inv");
+    if (!models.length) {
+      inv.innerHTML = `<div class="card empty">${icon("layers")}<h3>Nenhum modelo IFC processado</h3><p>Envie um arquivo .ifc (IFC2X3, IFC4 ou IFC4X3). A leitura acontece em segundo plano.</p></div>`;
+      return;
+    }
+    renderInventory(inv, pid, models, selModel);
+  };
+
+  function fileRow(f) {
+    const j = f.last_job;
+    const running = j && ["na fila", "executando"].includes(j.status);
+    const st = f.kind !== "ifc" ? `<span class="muted small">guardado (leitura na Fase 2)</span>`
+      : running ? `<div class="job" data-job="${j.id}"><span class="small">${esc(j.message || j.status)}</span><span class="progress"><i style="width:${Math.round(j.progress * 100)}%"></i></span></div>`
+      : f.status === "processado" ? `<span class="badge m-exp">processado · ${f.ifc_model ? f.ifc_model.n_elements : 0} elementos</span>`
+      : f.status === "erro" ? `<span class="badge m-miss" title="${esc(f.error)}">erro</span> <span class="small">${esc(f.error || "")}</span>`
+      : `<span class="badge">${esc(f.status)}</span>`;
+    return `<tr data-row="${f.id}"><td><span class="badge ${f.kind === "ifc" ? "ifc" : esc(f.kind)}">${esc(f.kind.toUpperCase())}</span></td>
+      <td><div class="t">${esc(f.original_filename)}</div><div class="muted small">${fmtSize(f.size_bytes)} · ${fmtDate(f.created_at)}</div></td>
+      <td>v${f.version}${f.previous_file_id ? ` <span class="muted small">(substitui v${f.version - 1})</span>` : ""}</td><td>${esc(f.discipline || "—")}</td><td>${st}</td>
+      <td><div class="actions">
+        ${running ? `<button class="btn sm" data-f="cancel" data-id="${f.id}" data-job="${j.id}">${icon("x")}Cancelar</button>` : ""}
+        <button class="btn sm" data-f="orig" data-id="${f.id}">${icon("external")}Original</button>
+        ${f.kind === "ifc" && !running ? `<button class="btn sm" data-f="reproc" data-id="${f.id}" title="Ler o IFC novamente">${icon("refresh")}</button>` : ""}
+        <button class="btn sm danger" data-f="del" data-id="${f.id}" title="Remover do projeto">${icon("trash")}</button></div></td></tr>`;
+  }
+
+  async function openProjectFile(pid, f) {
+    try {
+      const url = `${API.base}/api/projects/${pid}/files/${f.id}/original${f.kind === "pdf" || f.kind === "image" ? "?inline=true" : ""}`;
+      const r = await fetch(url, { headers: API.headers() });
+      if (!r.ok) throw new Error(`Erro ${r.status}`);
+      const blobUrl = URL.createObjectURL(await r.blob());
+      if (f.kind === "pdf" || f.kind === "image") window.open(blobUrl, "_blank", "noopener");
+      else { const a = document.createElement("a"); a.href = blobUrl; a.download = f.original_filename; a.click(); }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (e) { toast(e.message, "err"); }
+  }
+
+  async function pollJobs(pid, seq) {
+    if (routeSeq !== seq) return;
+    let list;
+    try { list = await API.get(`/api/jobs?project_id=${pid}`); } catch { return; }
+    if (routeSeq !== seq) return;
+    let stillActive = false;
+    for (const j of list) {
+      const box = document.querySelector(`.job[data-job="${j.id}"]`);
+      if (!box) continue;
+      if (["na fila", "executando"].includes(j.status)) {
+        stillActive = true;
+        $(".small", box).textContent = j.message || j.status;
+        $(".progress i", box).style.width = `${Math.round(j.progress * 100)}%`;
+      }
+    }
+    if (stillActive) setTimeout(() => pollJobs(pid, seq), 1200);
+    else { toast("Processamento concluído.", "ok"); render(); }
+  }
+
+  function renderInventory(inv, pid, models, m) {
+    const s = m.summary;
+    const elsWithMissing = Object.values(s.missing_info || {}).length;
+    inv.innerHTML = `
+      <section class="card">
+        <div class="page-head"><div><p class="eyebrow">Inventário técnico do modelo</p><h2>${esc(m.original_filename)} <span class="muted">v${m.version}</span></h2>
+          <p class="muted small">${esc(m.schema_name)} · ${esc(m.header.originating_system || m.header.application || "aplicativo não informado")} · lido em ${fmtNum(m.parse_seconds)} s · ${fmtDate(m.processed_at)}</p></div>
+          <div class="actions">${models.length > 1 ? `<select id="modelSel">${models.map((x) => `<option value="${x.id}" ${x.id === m.id ? "selected" : ""}>${esc(x.original_filename)} v${x.version} (${esc(x.schema_name)})</option>`).join("")}</select>` : ""}
+          <button class="btn sm" id="expInv">${icon("external")}Exportar JSON</button></div></div>
+        <div class="grid stats" style="margin-top:16px">
+          <div class="stat"><span class="num">${fmtNum(s.elements_total, 0)}</span><span class="lbl">Elementos</span><span class="hint">${s.auxiliary_ignored} auxiliares ignorados (aberturas etc.)</span></div>
+          <div class="stat"><span class="num">${Object.keys(s.classes).length}</span><span class="lbl">Categorias IFC</span></div>
+          <div class="stat"><span class="num">${s.storeys.length}</span><span class="lbl">Pavimentos</span></div>
+          <div class="stat"><span class="num">${s.materials.length}</span><span class="lbl">Materiais</span></div>
+          <div class="stat"><span class="num">${s.pending_classification}</span><span class="lbl">Sem disciplina definida</span><span class="hint">${s.elements_with_suggestion} com sugestão pelo nome</span></div>
+        </div>
+        ${(s.warnings || []).map((w) => `<div class="notice" style="margin-top:12px">${icon("alert")}<div>${esc(w)}</div></div>`).join("")}
+        ${s.read_errors ? `<div class="notice err" style="margin-top:12px">${icon("alert")}<div>${s.read_errors} elemento(s) com erro de leitura.</div></div>` : ""}
+      </section>
+      <div class="inv-grid">
+        <section class="card"><h3>Disciplinas</h3><p class="muted small">Classificação por regras (classe IFC, tipo, sistema, propriedades, material). Nome sozinho nunca classifica.</p>
+          <table class="docs-table"><thead><tr><th>Disciplina</th><th>Total</th><th>Alta</th><th>Média</th><th>Baixa</th></tr></thead><tbody>
+          ${Object.entries(s.disciplines).map(([d, v]) => `<tr><td><a href="javascript:void 0" data-filter="discipline" data-v="${esc(d)}">${esc(d)}</a></td><td><b>${v.total}</b></td><td>${v.alta}</td><td>${v["média"]}</td><td>${v.baixa}</td></tr>`).join("")}</tbody></table></section>
+        <section class="card"><h3>Pavimentos</h3><table class="docs-table"><thead><tr><th>Pavimento</th><th>Cota</th><th>Elementos</th></tr></thead><tbody>
+          ${s.storeys.map((x) => `<tr><td><a href="javascript:void 0" data-filter="storey" data-v="${esc(x.name)}">${esc(x.name)}</a></td><td>${x.elevation_m == null ? "—" : fmtNum(x.elevation_m) + " m"}</td><td>${x.elements}</td></tr>`).join("")}</tbody></table></section>
+        <section class="card"><h3>Materiais</h3><table class="docs-table"><thead><tr><th>Material</th><th>Elementos</th></tr></thead><tbody>
+          ${s.materials.slice(0, 15).map((x) => `<tr><td>${esc(x.name)}</td><td>${x.elements}</td></tr>`).join("") || `<tr><td colspan="2" class="muted">Nenhum material associado no IFC.</td></tr>`}</tbody></table>
+          ${s.materials.length > 15 ? `<p class="muted small">+ ${s.materials.length - 15} materiais</p>` : ""}</section>
+        <section class="card"><h3>Informações ausentes</h3><p class="muted small">Itens que um memorial normalmente precisa e que <b>não estão</b> no IFC. Nada foi inventado.</p>
+          <div class="chips" style="margin-top:10px">${Object.entries(s.missing_info).map(([k, n]) => `<a class="chip miss" href="javascript:void 0" data-filter="missing" data-v="${esc(k)}">${esc(k)}: ${n} elemento(s)</a>`).join("") || `<span class="chip">Nenhuma ausência detectada</span>`}</div>
+          ${elsWithMissing ? `<p style="margin-top:10px"><a href="javascript:void 0" data-filter="missing" data-v="any">Ver todos os elementos com informação ausente →</a></p>` : ""}</section>
+      </div>
+      <section class="card"><h3>Quantidades por categoria</h3>
+        <p class="muted small">Somatório por regra dos valores de cada elemento, <b>separado por método de origem</b> (explícito no IFC × calculado pela geometria). Aproximações para conferência — <b>não são quantitativos executivos</b>.</p>
+        <div class="table-wrap"><table class="docs-table"><thead><tr><th>Categoria IFC</th><th>Quantidade</th><th>Total</th><th>Elementos</th><th>Origem</th></tr></thead><tbody>
+        ${s.quantity_totals.filter((t) => t.unit !== "un").map((t) => `<tr><td>${esc(t.ifc_class)}</td><td>${esc(t.quantity)}</td><td><b>${fmtNum(t.total, 3)} ${esc(t.unit)}</b></td><td>${t.elements}</td><td>${methodBadge(t.method)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nenhuma quantidade disponível.</td></tr>`}</tbody></table></div>
+        ${s.geometry ? `<p class="muted small" style="margin-top:8px">Cálculo geométrico: ${esc(s.geometry.status)} · ${s.geometry.computed || 0} elemento(s) em ${fmtNum(s.geometry.seconds || 0)} s${s.geometry.failed ? ` · ${s.geometry.failed} falha(s)` : ""}. ${esc(s.geometry.method || "")}</p>` : ""}</section>
+      <section class="card" id="elemSec"><h3>Elementos</h3>
+        <form class="toolbar" id="elFilter" style="padding:10px 0">
+          <input type="search" name="q" placeholder="Nome, tipo ou GlobalId">
+          <select name="discipline"><option value="">Todas as disciplinas</option>${DISCS.map((d) => `<option>${d}</option>`).join("")}</select>
+          <select name="ifc_class"><option value="">Todas as categorias</option>${Object.keys(s.classes).sort().map((c) => `<option>${esc(c)}</option>`).join("")}</select>
+          <select name="storey"><option value="">Todos os pavimentos</option>${s.storeys.map((x) => `<option>${esc(x.name)}</option>`).join("")}</select>
+          <select name="missing"><option value="">Com ou sem ausências</option><option value="any">Com informação ausente</option>${Object.keys(s.missing_info).map((k) => `<option value="${esc(k)}">Sem ${esc(k)}</option>`).join("")}</select>
+        </form>
+        <div id="elTable"></div></section>`;
+    const sel = $("#modelSel");
+    if (sel) sel.addEventListener("change", () => { location.hash = `#/projeto/${pid}?modelo=${sel.value}`; });
+    $("#expInv").addEventListener("click", async () => {
+      try {
+        const data = await API.get(`/api/ifc-models/${m.id}/export`);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+        a.download = `inventario_${m.original_filename.replace(/\.ifc$/i, "")}_v${m.version}.json`;
+        a.click();
+      } catch (e) { toast(e.message, "err"); }
+    });
+    const form = $("#elFilter");
+    let offset = 0;
+    const load = async () => {
+      const qs = new URLSearchParams({ limit: "50", offset: String(offset) });
+      new FormData(form).forEach((v, k) => v && qs.set(k, v));
+      const box = $("#elTable");
+      let res;
+      try { res = await API.get(`/api/ifc-models/${m.id}/elements?${qs}`); } catch (e) { box.innerHTML = `<div class="notice err">${icon("alert")}<div>${esc(e.message)}</div></div>`; return; }
+      box.innerHTML = res.items.length ? `<div class="table-wrap"><table class="docs-table el-table"><thead><tr><th>Elemento</th><th>Categoria IFC</th><th>Pavimento</th><th>Disciplina</th><th>Ausente</th></tr></thead><tbody>
+        ${res.items.map((x) => `<tr data-el="${x.id}" tabindex="0"><td><div class="t">${esc(x.name || "(sem nome)")}</div><div class="muted small">${esc(x.type_name || "")}</div></td>
+          <td>${esc(x.ifc_class)}${x.predefined_type && x.predefined_type !== "NOTDEFINED" ? ` <span class="muted small">${esc(x.predefined_type)}</span>` : ""}</td><td>${esc(x.storey || "—")}</td>
+          <td>${esc(x.discipline)} ${confBadge(x.confidence)}</td><td>${x.missing.map((k) => `<span class="chip miss">${esc(k)}</span>`).join(" ")}</td></tr>`).join("")}</tbody></table></div>
+        <div class="pager"><span class="muted small">${res.offset + 1}–${res.offset + res.items.length} de ${res.total}</span>
+          <button class="btn sm" id="pgPrev" ${res.offset ? "" : "disabled"}>Anterior</button><button class="btn sm" id="pgNext" ${res.offset + res.items.length < res.total ? "" : "disabled"}>Próxima</button></div>`
+        : `<p class="muted">Nenhum elemento com esses filtros.</p>`;
+      const prev = $("#pgPrev"), next = $("#pgNext");
+      if (prev) prev.onclick = () => { offset = Math.max(0, offset - 50); load(); };
+      if (next) next.onclick = () => { offset += 50; load(); };
+    };
+    form.addEventListener("input", () => { offset = 0; load(); });
+    form.addEventListener("submit", (e) => e.preventDefault());
+    inv.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-filter]");
+      if (a) {
+        ["discipline", "storey", "missing", "ifc_class"].forEach((k) => { form[k].value = ""; });
+        form.q.value = "";
+        const fieldVal = a.dataset.filter === "storey" && a.dataset.v === "(sem pavimento)" ? "" : a.dataset.v;
+        if (form[a.dataset.filter].querySelector(`option[value="${CSS.escape(fieldVal)}"]`) || a.dataset.filter !== "storey") form[a.dataset.filter].value = fieldVal;
+        offset = 0; load();
+        $("#elemSec").scrollIntoView({ behavior: "smooth" });
+      }
+      const row = e.target.closest("[data-el]");
+      if (row) openElement(row.dataset.el);
+    });
+    inv.addEventListener("keydown", (e) => { const row = e.target.closest("[data-el]"); if (row && e.key === "Enter") openElement(row.dataset.el); });
+    load();
+  }
+
+  async function openElement(eid) {
+    let el;
+    try { el = await API.get(`/api/ifc-elements/${eid}`); } catch (e) { toast(e.message, "err"); return; }
+    let d = $("#drawer");
+    if (!d) {
+      d = document.createElement("aside");
+      d.id = "drawer"; d.className = "drawer glass-strong"; d.setAttribute("role", "dialog"); d.setAttribute("aria-label", "Detalhes do elemento");
+      document.body.appendChild(d);
+      d.addEventListener("click", (e) => { if (e.target.closest("[data-close-drawer]")) d.classList.remove("open"); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") d.classList.remove("open"); });
+    }
+    const psets = Object.entries(el.psets || {});
+    d.innerHTML = `
+      <header class="modal-head"><div style="flex:1"><p class="eyebrow">${esc(el.ifc_class)}</p><h2>${esc(el.name || "(sem nome)")}</h2></div>
+        <button class="icon-btn" data-close-drawer aria-label="Fechar">${icon("x")}</button></header>
+      <dl class="kv">
+        <dt>GlobalId</dt><dd><code>${esc(el.global_id)}</code></dd>
+        ${el.type_name ? `<dt>Tipo</dt><dd>${esc(el.type_name)} <span class="muted small">${esc(el.type_class || "")}</span></dd>` : ""}
+        ${el.predefined_type ? `<dt>PredefinedType</dt><dd>${esc(el.predefined_type)}</dd>` : ""}
+        ${el.tag ? `<dt>Tag</dt><dd>${esc(el.tag)}</dd>` : ""}
+        ${el.description ? `<dt>Descrição</dt><dd>${esc(el.description)}</dd>` : ""}
+        <dt>Pavimento</dt><dd>${esc(el.storey || "não encontrado")}</dd>
+        ${el.systems && el.systems.length ? `<dt>Sistemas</dt><dd>${el.systems.map((s) => esc(`${s.name}${s.predefined ? " (" + s.predefined + ")" : ""}`)).join(", ")}</dd>` : ""}
+        ${el.classification && el.classification.length ? `<dt>Classificação</dt><dd>${el.classification.map((c) => esc(`${c.system || ""} ${c.code || ""} ${c.name || ""}`)).join("; ")}</dd>` : ""}
+      </dl>
+      <div class="drawer-sec"><h3>Disciplina: ${esc(el.discipline)} ${confBadge(el.confidence)}</h3>
+        <p class="muted small">Motivos: ${esc((el.reasons || []).join("; "))}</p>
+        ${el.suggestion ? `<div class="notice" style="margin-top:8px">${icon("info")}<div><b>Sugestão inferida:</b> ${esc(el.suggestion.discipline)} — ${esc(el.suggestion.reason)}.</div></div>` : ""}</div>
+      <div class="drawer-sec"><h3>Informações para o memorial</h3>
+        <table class="docs-table"><tbody>${(el.checks || []).map((c) => `<tr><td>${esc(c.info)}</td><td><span class="badge ${STATUS_CLS[c.status] || ""}">${esc(c.status)}</span></td><td>${esc(c.value || "—")}${c.source ? ` <span class="muted small">(${esc(c.source)})</span>` : ""}</td></tr>`).join("") || `<tr><td class="muted">Sem verificação para esta categoria.</td></tr>`}</tbody></table></div>
+      <div class="drawer-sec"><h3>Materiais</h3>${el.materials && el.materials.length ? `<ul class="plain">${el.materials.map((x) => `<li>${esc(x.name || "(sem nome)")}${x.thickness_m ? ` — ${fmtNum(x.thickness_m * 100, 1)} cm` : ""}${x.profile ? ` — perfil ${esc(x.profile)}` : ""} <span class="muted small">${esc(x.source)}</span></li>`).join("")}</ul>${el.material_set && el.material_set.name ? `<p class="muted small">Conjunto: ${esc(el.material_set.name)}</p>` : ""}` : `<p class="muted">Não encontrado no IFC.</p>`}</div>
+      <div class="drawer-sec"><h3>Quantidades</h3>${el.quantities && el.quantities.length ? `<table class="docs-table"><thead><tr><th>Nome</th><th>Valor</th><th>Origem</th></tr></thead><tbody>
+        ${el.quantities.map((q) => `<tr><td>${esc(q.name)}<div class="muted small">${esc(q.source || "")}</div></td><td><b>${fmtNum(q.value, 4)} ${esc(q.unit)}</b></td><td>${methodBadge(q.method)}${q.note ? `<div class="muted small">${esc(q.note)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Nenhuma quantidade no IFC e nenhuma calculada.</p>`}</div>
+      <div class="drawer-sec"><h3>Property Sets (${psets.length})</h3>${psets.map(([n, props]) => `<details><summary>${esc(n)}</summary><table class="docs-table"><tbody>
+        ${Object.entries(props || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`).join("")}</tbody></table></details>`).join("") || `<p class="muted">Nenhum Property Set.</p>`}</div>`;
+    requestAnimationFrame(() => d.classList.add("open"));
+  }
 
   // ------------------------------------------------------------------ Google Drive
   routes.drive = async (view) => {

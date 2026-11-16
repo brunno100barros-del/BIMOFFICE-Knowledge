@@ -58,7 +58,7 @@ Nada foi publicado na internet ainda. Para isso é preciso **decidir onde hosped
   Linux com Python 3.13, acessível pela rede/VPN, com HTTPS fornecido pela TI.
 - **Nuvem** (ex.: VPS Linux): exige atenção à LGPD e a política da instituição sobre documentos.
 
-Requisitos mínimos do servidor: 4 GB de RAM (modelo E5 ≈ 1 GB), 5 GB de disco + documentos,
+Requisitos mínimos do servidor (v0.4, com leitor IFC): Linux com glibc ≥ 2.31 (Ubuntu 20.04+/Debian 11+; não Alpine), 4 GB de RAM (modelo E5 ≈ 1 GB), 5 GB de disco + documentos,
 disco **persistente** (o banco SQLite e os originais ficam em `BIMOFFICE_DATA_DIR`).
 Serviços "gratuitos" que apagam o disco ao reiniciar **não servem**.
 
