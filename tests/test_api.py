@@ -64,8 +64,11 @@ def test_full_document_lifecycle(client, tmp_path):
 
 
 def test_duplicate_returns_409(client, tmp_path):
-    assert _upload(client, tmp_path)[0].status_code == 201
-    assert _upload(client, tmp_path)[0].status_code == 409
+    # envia EXATAMENTE os mesmos bytes duas vezes (gerar o DOCX de novo mudaria a data interna do arquivo)
+    data = make_docx(tmp_path / "a.docx").read_bytes()
+    up = lambda name: client.post("/api/library/documents", files={"file": (name, data, DOCX_MIME)})  # noqa: E731
+    assert up("a.docx").status_code == 201
+    assert up("outro_nome.docx").status_code == 409
 
 
 def test_invalid_file_returns_400(client):
