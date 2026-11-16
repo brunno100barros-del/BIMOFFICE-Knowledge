@@ -8,6 +8,14 @@ Tudo nesta pasta é **FICTÍCIO**, criado para demonstrar e testar o sistema. N�
 | `memoriais_referencia/` | 3 memoriais de referência em DOCX (arquitetura e acabamentos; estrutura e fundações; instalações), com normas ABNT reais citadas. Textos fictícios. |
 | `saida/` | O memorial **produzido pelo sistema** a partir dos itens acima (minuta DOCX, ainda **não revisada**). |
 
+## Ver sem instalar (GitHub Pages)
+Abra https://brunno100barros-del.github.io/BIMOFFICE-Knowledge/ e clique em
+**“Abrir demonstração com o projeto exemplo”**. É uma demonstração **somente leitura**: os dados (inventário,
+memorial, biblioteca) são as respostas reais do sistema para este exemplo, gravadas em `frontend/demo/` por
+`python scripts/exemplo/gerar_demo_estatico.py`. Enviar arquivos, editar, gerar e pesquisar por significado
+exigem o programa instalado (a pesquisa não é simulada na demonstração).
+Ao mudar o sistema ou o exemplo, rode o script de novo para atualizar a demonstração.
+
 ## Como reproduzir no seu computador
 Opção A — pela interface (recomendado para conhecer o fluxo):
 1. **Biblioteca** → Importar → selecione os 3 DOCX de `memoriais_referencia/`.

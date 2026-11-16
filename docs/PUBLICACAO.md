@@ -21,6 +21,7 @@ FastAPI, SQLite, leitura de DOCX/PDF, o modelo de IA nem guarda documentos. Por 
 | Onde a interface está aberta | Backend | O que funciona |
 |---|---|---|
 | `http://127.0.0.1:8000/` (iniciar.bat) | o seu PC | **tudo** |
+| GitHub Pages → “Abrir demonstração” | nenhum | **projeto exemplo somente leitura** (respostas reais gravadas em `frontend/demo/`); pesquisa e edição indisponíveis |
 | GitHub Pages, sem configurar | nenhum | **modo demonstração**: telas, tema, navegação. Avisa o que depende do backend. Nenhum dado é simulado. |
 | GitHub Pages + Configurações → `http://127.0.0.1:8000` | o seu PC (iniciar.bat ligado) | **tudo**, mas só no computador onde o backend está ligado |
 | GitHub Pages + endereço de um servidor | servidor (Etapa 6) | **tudo**, de qualquer lugar, com senha |

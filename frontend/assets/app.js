@@ -75,7 +75,10 @@
       if (this.token) h.Authorization = `Bearer ${this.token}`;
       return h;
     },
+    demo: false,
+    manifest: null,
     async req(path, opts = {}) {
+      if (this.demo) return Demo.req(path, opts);
       if (!this.base) throw new Error("Nenhum backend configurado.");
       let r;
       try {
@@ -95,9 +98,13 @@
     get(p) { return this.req(p); },
     post(p, body) { return this.req(p, { method: "POST", ...(body ? { body: JSON.stringify(body), headers: { "Content-Type": "application/json" } } : {}) }); },
     del(p) { return this.req(p, { method: "DELETE" }); },
-    originalUrl(id, inline) { return `${this.base}/api/library/documents/${id}/original${inline ? "?inline=true" : ""}`; },
+    originalUrl(id, inline) {
+      if (this.demo) return Demo.fileUrl(`/api/library/documents/${id}/original`);
+      return `${this.base}/api/library/documents/${id}/original${inline ? "?inline=true" : ""}`;
+    },
     upload(file, meta, onProgress, path = "/api/library/documents") {
       return new Promise((resolve, reject) => {
+        if (this.demo) { reject(new Error(Demo.RO)); return; }
         const fd = new FormData();
         fd.append("file", file, file.name);
         Object.entries(meta).forEach(([k, v]) => v && fd.append(k, v));
@@ -118,9 +125,79 @@
     },
   };
 
+  // ------------------------------------------------------------------ demonstração estática
+  // Respostas REAIS do backend para o projeto exemplo, gravadas em demo/ (scripts/exemplo/gerar_demo_estatico.py).
+  // Somente leitura: nada é gerado no navegador e a pesquisa semântica NÃO é simulada.
+  const Demo = {
+    RO: "Demonstração somente leitura: para enviar arquivos, editar, gerar ou aprovar, instale o programa (iniciar.bat).",
+    cache: {},
+    active() { try { return sessionStorage.getItem("bimoffice-demo") === "1"; } catch { return false; } },
+    set(on) { try { on ? sessionStorage.setItem("bimoffice-demo", "1") : sessionStorage.removeItem("bimoffice-demo"); } catch { /* */ } },
+    async file(name) {
+      if (!this.cache[name]) {
+        const r = await fetch(`demo/${name}`);
+        if (!r.ok) throw new Error("Arquivo da demonstração não encontrado.");
+        this.cache[name] = await r.json();
+      }
+      return this.cache[name];
+    },
+    fileUrl(route) { const f = API.manifest && API.manifest.routes[route]; return f ? `demo/${f}` : "#"; },
+    async req(path, opts = {}) {
+      if ((opts.method || "GET") !== "GET") throw new Error(this.RO);
+      const [p, qs] = path.split("?");
+      const q = new URLSearchParams(qs || "");
+      const routes = API.manifest.routes;
+      if (p === "/api/search") throw new Error("A pesquisa semântica roda no programa instalado (modelo de IA local). Na demonstração ela não é simulada — instale o programa para pesquisar.");
+      if (p === "/api/jobs") return [];
+      let m = p.match(/^\/api\/ifc-models\/(\d+)\/elements$/);
+      if (m) {
+        const all = (await this.file(routes[p])).items;
+        const miss = q.get("missing"), st = q.get("storey"), term = (q.get("q") || "").toLowerCase();
+        const items = all.filter((e) => (!q.get("discipline") || e.discipline === q.get("discipline"))
+          && (!q.get("ifc_class") || e.ifc_class === q.get("ifc_class"))
+          && (!st || (st === "(sem pavimento)" ? !e.storey : e.storey === st))
+          && (!term || [e.name, e.global_id, e.type_name].some((x) => (x || "").toLowerCase().includes(term)))
+          && (!miss || (miss === "any" ? e.missing.length : e.missing.includes(miss))));
+        const limit = +(q.get("limit") || 100), offset = +(q.get("offset") || 0);
+        return { total: items.length, limit, offset, items: items.slice(offset, offset + limit) };
+      }
+      m = p.match(/^\/api\/ifc-elements\/(\d+)$/);
+      if (m) {
+        for (const [k, f] of Object.entries(routes)) {
+          if (!k.startsWith("elements_detail:")) continue;
+          const d = (await this.file(f))[m[1]];
+          if (d) return d;
+        }
+        throw new Error("Elemento não encontrado.");
+      }
+      if (p === "/api/library/documents") {
+        const t = (q.get("q") || "").toLowerCase();
+        return (await this.file(routes[p])).filter((d) => (!q.get("file_type") || d.file_type === q.get("file_type"))
+          && (!q.get("unit") || d.unit === q.get("unit")) && (!q.get("discipline") || d.discipline === q.get("discipline"))
+          && (!t || [d.title, d.original_filename, d.description].some((x) => (x || "").toLowerCase().includes(t))));
+      }
+      if (routes[p] && routes[p].endsWith(".json")) return this.file(routes[p]);
+      throw new Error("Esta informação não faz parte da demonstração (precisa do programa instalado).");
+    },
+    async start() {
+      const r = await fetch("demo/manifest.json");
+      if (!r.ok) throw new Error("Demonstração não disponível nesta página.");
+      API.manifest = await r.json();
+      API.demo = true;
+      API.cfg = await this.file(API.manifest.routes["/api/config"]);
+      API.online = true;
+    },
+  };
+
   // abre o original com a senha (se houver) sem expor o token na URL
   async function openOriginal(doc, inline) {
     try {
+      if (API.demo) {
+        const r = await fetch(API.originalUrl(doc.id || doc.document_id));
+        if (!r.ok) throw new Error("Arquivo não disponível na demonstração.");
+        saveBlob(await r.blob(), doc.original_filename || "documento");
+        return;
+      }
       if (!API.token) { window.open(API.originalUrl(doc.id || doc.document_id, inline), "_blank", "noopener"); return; }
       const r = await fetch(API.originalUrl(doc.id || doc.document_id, inline), { headers: API.headers() });
       if (!r.ok) throw new Error(`Erro ${r.status}`);
@@ -139,7 +216,11 @@
     const el = $("#conn");
     API.online = false;
     API.cfg = null;
-    if (API.base) {
+    API.demo = false;
+    if (Demo.active()) {
+      try { await Demo.start(); } catch (e) { Demo.set(false); toast(e.message, "err"); }
+    }
+    if (!API.demo && API.base) {
       try {
         API.cfg = await API.get("/api/config");
         API.online = true;
@@ -148,24 +229,41 @@
     }
     el.classList.toggle("on", API.online === true);
     el.classList.toggle("off", API.online !== true);
-    $(".conn-text", el).textContent = API.online === true
-      ? `Backend conectado · v${API.cfg.version}`
-      : API.online === "auth" ? "Backend exige senha" : "Sem backend · demonstração";
+    $(".conn-text", el).textContent = API.demo ? "Demonstração · projeto exemplo"
+      : API.online === true ? `Backend conectado · v${API.cfg.version}`
+      : API.online === "auth" ? "Backend exige senha" : "Sem backend";
     renderBanner();
   }
 
   function renderBanner() {
     const b = $("#banner");
+    if (API.demo) {
+      b.innerHTML = `<div class="notice info">${icon("info")}<div><b>Demonstração somente leitura — projeto EXEMPLO (dados fictícios).</b>
+        Tudo o que você vê aqui foi produzido pelo sistema real (leitura do IFC, inventário, memorial e sugestões) e gravado nesta página.
+        Para enviar seus arquivos, editar, gerar memoriais e pesquisar por significado, instale o programa.
+        <div class="actions" style="margin-top:8px"><a class="btn sm" href="#/projeto/1">${icon("cube")}Projeto exemplo</a>
+        <a class="btn sm" href="#/memoriais">${icon("file")}Memorial gerado</a>
+        <button class="btn sm" id="demoOff">${icon("x")}Sair da demonstração</button></div></div></div>`;
+      $("#demoOff").onclick = async () => { Demo.set(false); await connect(); location.hash = "#/dashboard"; render(); };
+      return;
+    }
     if (API.online === true) { b.innerHTML = ""; return; }
     const pages = location.hostname.endsWith("github.io");
     b.innerHTML = `<div class="notice ${API.online === "auth" ? "err" : ""}">${icon("plug")}<div>
       ${API.online === "auth"
         ? "<b>O backend exige senha.</b> Informe a senha da API em <a href='#/config'>Configurações</a>."
-        : `<b>Modo demonstração: nenhum backend conectado.</b> A interface está ativa, mas importar, listar e pesquisar memoriais
+        : `<b>Nenhum backend conectado.</b> A interface está ativa, mas importar, listar e pesquisar memoriais
            dependem do backend FastAPI (processamento de DOCX/PDF, banco SQLite e modelo E5 local).
            ${pages ? "Para usar de verdade, rode o <code>iniciar.bat</code> no seu computador e informe <code>http://127.0.0.1:8000</code> em" : "Verifique se o backend está ligado ou ajuste o endereço em"}
-           <a href="#/config">Configurações</a>. Nenhum dado é simulado.`}
+           <a href="#/config">Configurações</a>. Nenhum dado é simulado.
+           <div class="actions" style="margin-top:8px"><button class="btn sm primary" id="demoOn">${icon("cube")}Abrir demonstração com o projeto exemplo</button></div>`}
       </div></div>`;
+    const on = $("#demoOn");
+    if (on) on.onclick = async () => {
+      Demo.set(true);
+      await connect();
+      if (API.demo) { location.hash = "#/projeto/1"; render(); }
+    };
   }
 
   const needBackend = (what) => `<div class="card empty">${icon("plug")}<h3>${esc(what)} depende do backend</h3>
@@ -679,7 +777,8 @@
 
   async function openProjectFile(pid, f) {
     try {
-      const url = `${API.base}/api/projects/${pid}/files/${f.id}/original${f.kind === "pdf" || f.kind === "image" ? "?inline=true" : ""}`;
+      const url = API.demo ? Demo.fileUrl(`/api/projects/${pid}/files/${f.id}/original`)
+        : `${API.base}/api/projects/${pid}/files/${f.id}/original${f.kind === "pdf" || f.kind === "image" ? "?inline=true" : ""}`;
       const r = await fetch(url, { headers: API.headers() });
       if (!r.ok) throw new Error(`Erro ${r.status}`);
       const blobUrl = URL.createObjectURL(await r.blob());
@@ -844,6 +943,14 @@
   // ------------------------------------------------------------------ Memorial em elaboração
   async function downloadExport(mid, draft) {
     try {
+      if (API.demo) {
+        if (!draft) throw new Error(Demo.RO);
+        const r = await fetch(Demo.fileUrl(`/api/memorials/${mid}/export?draft=true`));
+        if (!r.ok) throw new Error("Minuta não disponível na demonstração.");
+        saveBlob(await r.blob(), "Memorial descritivo - EXEMPLO - MINUTA.docx");
+        toast("Minuta do exemplo baixada (gerada pelo sistema real; marcada como não revisada).", "ok");
+        return;
+      }
       const r = await fetch(`${API.base}/api/memorials/${mid}/export?draft=${draft}`, { headers: API.headers() });
       if (!r.ok) { let d = `Erro ${r.status}`; try { d = detailText((await r.json()).detail) || d; } catch { /* */ } throw new Error(d); }
       const cd = r.headers.get("content-disposition") || "";
@@ -977,7 +1084,7 @@
           <button class="icon-btn" data-act="rename" title="Renomear" aria-label="Renomear">${icon("gear")}</button>
           ${c.key !== "custom" ? `<button class="icon-btn" data-act="regen" title="Regerar a partir do IFC" aria-label="Regerar">${icon("refresh")}</button>` : ""}
           <button class="icon-btn" data-act="del" title="Remover capítulo" aria-label="Remover">${icon("trash")}</button></span></header>
-      <textarea data-text rows="${Math.min(22, Math.max(4, Math.ceil((c.text || "").length / 95) + (c.text || "").split("\n").length))}" placeholder="Sem texto. Redija aqui ou insira uma sugestão da biblioteca abaixo." aria-label="Texto do capítulo ${esc(c.title)}">${esc(c.text)}</textarea>
+      <textarea data-text ${API.demo ? "readonly" : ""} rows="${Math.min(22, Math.max(4, Math.ceil((c.text || "").length / 95) + (c.text || "").split("\n").length))}" placeholder="Sem texto. Redija aqui ou insira uma sugestão da biblioteca abaixo." aria-label="Texto do capítulo ${esc(c.title)}">${esc(c.text)}</textarea>
       <div class="actions"><button class="btn sm" data-act="save" disabled>${icon("check")}Salvar texto</button>
         <button class="btn sm ${approved ? "" : "primary"}" data-act="approve">${icon(approved ? "restore" : "check")}${approved ? "Reabrir para revisão" : "Aprovar capítulo"}</button>
         <button class="btn sm" data-act="hist">${icon("restore")}Histórico</button></div>
@@ -1092,6 +1199,7 @@
   let queue = [];
   let running = false;
   function openImport() {
+    if (API.demo) { toast(Demo.RO, "err"); return; }
     if (API.online !== true) { toast("Conecte um backend para importar.", "err"); return; }
     queue = []; $("#upList").innerHTML = ""; $("#upSummary").textContent = ""; $("#upStart").disabled = true;
     modal.hidden = false;

@@ -3,6 +3,8 @@
 Biblioteca inteligente de memoriais descritivos (SENAI) com pesquisa semântica local.
 Status: **v0.5** — **memorial descritivo gerado a partir do IFC** (por capítulos, com sugestões da biblioteca, revisão e Word), projetos com leitura de IFC, biblioteca DOCX/PDF, pesquisa híbrida (E5 + FTS5) e interface Liquid Glass.
 
+**Ver sem instalar:** abra a página publicada e clique em **“Abrir demonstração com o projeto exemplo”** (somente leitura, dados fictícios processados pelo sistema real).
+
 **Projeto exemplo pronto para testar:** veja [exemplos/LEIA-ME.md](exemplos/LEIA-ME.md) (IFC modelo, 3 memoriais de referência e o memorial produzido).
 
 ![Dashboard](docs/img/dashboard-claro.png)

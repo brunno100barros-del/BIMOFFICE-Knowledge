@@ -51,6 +51,9 @@ antes de cada commit; commits pequenos e em português.
   "Memorial em elaboração" e editor. Docs: `docs/MEMORIAL.md`.
 - **Projeto exemplo** em `exemplos/` (IFC fictício 197 elementos, 3 memoriais de referência fictícios, minuta
   produzida em `exemplos/saida/`); scripts em `scripts/exemplo/`. Sugestões certas: 16/17 capítulos no top-3.
+- **Demonstração estática (Pages):** `frontend/demo/` = respostas REAIS da API para o exemplo, geradas por
+  `scripts/exemplo/gerar_demo_estatico.py` (rodar de novo quando API/exemplo mudarem); `Demo` em app.js responde
+  só GET, bloqueia mudanças e NÃO simula pesquisa. Teste: `tests/test_demo_static.py`.
 - **Pendente / depende do usuário:** validar o exemplo; memoriais e IFCs reais; chave Gemini + autorização para enviar
   dados ao Google (Fase 3); credenciais OAuth do Drive; servidor do backend online.
 
