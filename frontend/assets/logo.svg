@@ -1,15 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#3FC8E0"/>
-      <stop offset="1" stop-color="#7B6CF6"/>
-    </linearGradient>
-  </defs>
-  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)"/>
-  <rect x="2.5" y="2.5" width="59" height="59" rx="15.5" fill="none" stroke="#ffffff" stroke-opacity=".45"/>
-  <path d="M19 16h18l9 9v23H19z" fill="#ffffff" fill-opacity=".92"/>
-  <path d="M37 16v9h9" fill="none" stroke="#3B4EC8" stroke-width="2.5" stroke-linejoin="round"/>
-  <path d="M24 31h15M24 37h11" stroke="#3B4EC8" stroke-width="2.6" stroke-linecap="round"/>
-  <circle cx="41" cy="42" r="6" fill="none" stroke="#3B4EC8" stroke-width="2.8"/>
-  <path d="m45.5 46.5 4 4" stroke="#3B4EC8" stroke-width="2.8" stroke-linecap="round"/>
+<!-- COORDIX · símbolo (olho estilizado a partir da fotografia de referência). Vetorial, fundo transparente.
+     Cores por variáveis CSS (--cx-traco, --cx-iris, --cx-limbo, --cx-pupila, --cx-brilho), com padrão claro/escuro. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14.44 19.52 40.52 27.33" role="img" aria-label="COORDIX">
+<title>COORDIX</title>
+<style>
+.cx-palpebra,.cx-cilios,.cx-sob{fill:var(--cx-traco,#15181d)}
+.cx-inferior{stroke:var(--cx-traco,#15181d);opacity:.55}
+.cx-iris{fill:var(--cx-iris,#6b3a1f)}
+.cx-limbo{stroke:var(--cx-limbo,#3a1f10)}
+.cx-pupila{fill:var(--cx-pupila,#140b06)}
+.cx-brilho{fill:var(--cx-brilho,#ffffff)}
+@media (prefers-color-scheme:dark){
+.cx-palpebra,.cx-cilios,.cx-sob{fill:var(--cx-traco,#e8eaed)}
+.cx-inferior{stroke:var(--cx-traco,#e8eaed)}
+.cx-iris{fill:var(--cx-iris,#9a5a32)}
+.cx-limbo{stroke:var(--cx-limbo,#4a2a16)}}
+</style><defs><clipPath id="cx-abertura"><path d="M15.27,41.9 C19.08,32.1 24.52,28.43 30.23,28.57 C37.44,28.7 44.58,31.83 49,37.54 C44.38,43.26 37.44,46.11 30.37,45.84 C24.11,45.57 18.67,44.21 15.27,41.9Z"/></clipPath></defs>
+<g class="cx-olho">
+<g clip-path="url(#cx-abertura)">
+<circle class="cx-iris" cx="30.03" cy="38.22" r="8.6"/>
+<circle class="cx-limbo" cx="30.03" cy="38.22" r="8.15" fill="none" stroke-width="0.9"/>
+<circle class="cx-pupila" cx="30.03" cy="38.52" r="3.2"/>
+<path class="cx-brilho" d="M27.03,33.92h2.5v2.1h-2.5z M30.13,33.92h4.7v2.1h-4.7z"/>
+</g>
+<path class="cx-inferior" d="M16.09,42.58 C19.08,44.62 24.52,45.84 30.37,45.98 C37.44,46.25 44.24,43.26 48.05,38.9" fill="none" stroke-width="0.55" stroke-linecap="round"/>
+<path class="cx-palpebra" d="M15.04,41.81 L15.62,40.37 L16.23,39.03 L16.85,37.77 L17.49,36.59 L18.16,35.5 L18.84,34.48 L19.55,33.54 L20.27,32.68 L21.01,31.9 L21.77,31.19 L22.55,30.55 L23.34,29.98 L24.16,29.48 L24.99,29.04 L25.83,28.68 L26.69,28.37 L27.56,28.14 L28.45,27.97 L29.35,27.86 L30.25,27.81 L31.36,27.81 L32.48,27.86 L33.59,27.95 L34.7,28.09 L35.8,28.27 L36.9,28.5 L37.99,28.77 L39.07,29.08 L40.13,29.45 L41.18,29.85 L42.21,30.3 L43.23,30.8 L44.22,31.34 L45.2,31.93 L46.14,32.57 L47.06,33.25 L47.95,33.98 L48.81,34.75 L49.64,35.57 L50.42,36.44 L51.65,39.58 L48.88,37.64 L48.2,36.8 L47.49,36.01 L46.73,35.26 L45.94,34.54 L45.12,33.87 L44.27,33.23 L43.39,32.64 L42.48,32.09 L41.55,31.57 L40.6,31.1 L39.62,30.67 L38.63,30.28 L37.62,29.94 L36.59,29.63 L35.55,29.37 L34.5,29.15 L33.44,28.98 L32.37,28.85 L31.3,28.76 L30.23,28.72 L29.38,28.73 L28.55,28.79 L27.71,28.92 L26.89,29.11 L26.07,29.36 L25.26,29.67 L24.46,30.06 L23.67,30.51 L22.9,31.03 L22.13,31.62 L21.38,32.29 L20.65,33.04 L19.93,33.86 L19.22,34.76 L18.54,35.75 L17.87,36.81 L17.22,37.97 L16.6,39.2 L15.99,40.53 L15.41,41.95Z"/>
+<path class="cx-cilios" d="M24.18,30.03 Q24.3,26.69 22.74,23.85 Q24.67,26.5 24.93,29.65Z M25.78,29.29 Q26.53,26.23 25.56,23.37 Q26.97,26.09 26.66,29Z M27.43,28.81 Q26.77,24.59 28.63,20.59 Q27.26,24.51 28.43,28.64Z M29.13,28.58 Q29.31,24.82 31.71,21.73 Q29.85,24.81 30.21,28.56Z M31.16,28.6 Q32.1,23.64 35.94,20.12 Q32.66,23.68 32.29,28.68Z M33.34,28.81 Q34.8,24.8 38.56,22.45 Q35.38,24.9 34.5,28.99Z M35.5,29.2 Q38.09,24.37 43.33,22.24 Q38.68,24.51 36.66,29.49Z M37.63,29.78 Q40.4,26.28 44.94,25.39 Q40.97,26.47 38.76,30.16Z M39.7,30.53 Q43.78,26.81 49.45,26.79 Q44.31,27.04 40.78,31.01Z M41.71,31.48 Q45.4,29.21 49.78,30.12 Q45.9,29.49 42.7,32.03Z M43.62,32.6 Q48.41,30.73 53.23,32.84 Q48.85,31.03 44.51,33.21Z M45.42,33.9 Q49.24,33.27 52.44,35.61 Q49.63,33.59 46.19,34.55Z M47.09,35.39 Q51.46,35.52 54.36,38.89 Q51.79,35.85 47.73,36.05Z M48.61,37.04 Q51.63,37.83 53.09,40.64 Q51.89,38.16 49.13,37.7Z"/>
+</g>
 </svg>

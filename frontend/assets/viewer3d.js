@@ -22,8 +22,8 @@ export async function createViewer(host, { onPick } = {}) {
   scene.add(root);
 
   const MAT = {
-    hi: new THREE.MeshLambertMaterial({ color: 0xf08a24, side: THREE.DoubleSide }),
-    sel: new THREE.MeshLambertMaterial({ color: 0x1f7aff, side: THREE.DoubleSide }),
+    hi: new THREE.MeshLambertMaterial({ color: 0xef7a2a, side: THREE.DoubleSide }),  // --viewer-sel do COORDIX
+    sel: new THREE.MeshLambertMaterial({ color: 0x2a62c4, side: THREE.DoubleSide }),
     ghost: new THREE.MeshLambertMaterial({ color: 0x9aa3b2, transparent: true, opacity: 0.08, depthWrite: false }),
     space: new THREE.MeshLambertMaterial({ color: 0x3fb27f, transparent: true, opacity: 0.25, depthWrite: false }),
   };
