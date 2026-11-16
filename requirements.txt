@@ -7,5 +7,9 @@ pypdf>=5.0
 # leitura de modelos IFC (IFC2X3/IFC4/IFC4X3) — LGPL-3.0; ~200 MB instalado
 ifcopenshell>=0.8.4,<0.10
 numpy>=1.26
+# nuvem: PostgreSQL (produção) e armazenamento compatível com S3
+psycopg[binary]>=3.2
+boto3>=1.35
 httpx>=0.27
 pytest>=8.0
+moto[s3]>=5.0   # só para testes: simula S3 sem acessar a nuvem

@@ -15,6 +15,8 @@ EMBEDDINGS_DIR = DATA_DIR / "embeddings"
 BACKUPS_DIR = DATA_DIR / "backups"
 LOGS_DIR = DATA_DIR / "logs"
 DB_PATH = DATABASE_DIR / "bimoffice.db"
+# Banco de dados: vazio = SQLite em data/database (local). Na nuvem: postgresql://usuario:senha@host:5432/banco
+DATABASE_URL = os.environ.get("BIMOFFICE_DATABASE_URL", "")
 
 ALLOWED_EXTENSIONS = {".docx", ".pdf"}
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB

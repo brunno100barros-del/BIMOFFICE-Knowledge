@@ -21,7 +21,7 @@ from io import BytesIO
 from pathlib import Path
 
 from backend import config
-from backend.database.db import get_conn
+from backend.database.db import dialect, get_conn
 from backend.document_processing.chunker import chunk_document
 from backend.document_processing.docx_parser import parse_docx
 from backend.document_processing.pdf_parser import PdfWithoutText, parse_pdf
@@ -96,6 +96,16 @@ def _parse_tags(tags) -> list[str]:
 # ------------------------------------------------------------------ backup
 def backup_database() -> Path:
     config.ensure_dirs()
+    if dialect() == "postgres":  # cópia do banco PostgreSQL com pg_dump (formato custom, restaurável)
+        import shutil
+        import subprocess
+        dest = config.BACKUPS_DIR / f"bimoffice_{datetime.now():%Y%m%d_%H%M%S_%f}.dump"
+        if not shutil.which("pg_dump"):
+            raise LibraryError("pg_dump não está instalado no servidor: o backup do PostgreSQL é feito pelo serviço de banco.")
+        subprocess.run(["pg_dump", "--format=custom", "--file", str(dest), config.DATABASE_URL], check=True,
+                       capture_output=True, timeout=600)
+        log.info("Backup criado: %s", dest)
+        return dest
     dest = config.BACKUPS_DIR / f"bimoffice_{datetime.now():%Y%m%d_%H%M%S_%f}.db"
     src = sqlite3.connect(config.DB_PATH)
     dst = sqlite3.connect(dest)
@@ -331,7 +341,7 @@ def stats() -> dict:
             "SELECT file_type, COUNT(*) AS n FROM documents WHERE deleted_at IS NULL GROUP BY file_type")}
         trash = conn.execute("SELECT COUNT(*) FROM documents WHERE deleted_at IS NOT NULL").fetchone()[0]
         ch = conn.execute(
-            """SELECT COUNT(*) AS total, SUM(c.embedding IS NOT NULL) AS vec
+            """SELECT COUNT(*) AS total, SUM(CASE WHEN c.embedding IS NOT NULL THEN 1 ELSE 0 END) AS vec
                FROM chunks c JOIN documents d ON d.id=c.document_id WHERE d.deleted_at IS NULL"""
         ).fetchone()
         recent = conn.execute(
@@ -384,6 +394,8 @@ def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "",
     fq = _fts_query(q, match_any)
     if not fq:
         return []
+    if dialect() == "postgres":
+        return _search_text_pg(q, limit, unit, discipline, project, match_any)
     sql = """
         SELECT c.id AS chunk_id, c.document_id, d.title AS document_title, d.unit,
                d.discipline, c.section_path,
@@ -405,5 +417,35 @@ def search_text(q: str, limit: int = 20, unit: str = "", discipline: str = "",
         params.append(project)
     sql += " ORDER BY bm25(chunks_fts) LIMIT ?"
     params.append(limit)
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def _search_text_pg(q, limit, unit, discipline, project, match_any) -> list[dict]:
+    """Mesma busca no PostgreSQL: configuração 'bimoffice' (simple + unaccent) (sem acentos e sem maiúsculas, como o
+    FTS5 unicode61 remove_diacritics), termos em E (todos) ou OU (qualquer relevante), ordenação ts_rank."""
+    import unicodedata
+    terms = re.findall(r"\w+", q, flags=re.UNICODE)
+    if match_any:
+        terms = [t for t in terms if t.lower() not in STOPWORDS_PT and len(t) > 1] or terms
+    norm = lambda t: "".join(ch for ch in unicodedata.normalize("NFKD", t.lower()) if not unicodedata.combining(ch))  # noqa: E731
+    terms = list(dict.fromkeys(norm(t) for t in terms if norm(t)))
+    if not terms:
+        return []
+    tsq = (" | " if match_any else " & ").join(terms)
+    sql = """
+        SELECT c.id AS chunk_id, c.document_id, d.title AS document_title, d.unit, d.discipline, c.section_path,
+               ts_headline('bimoffice', c.text, to_tsquery('bimoffice', ?),
+                           'StartSel=[, StopSel=], MaxWords=24, MinWords=8, FragmentDelimiter= … ') AS snippet
+        FROM chunks c JOIN documents d ON d.id = c.document_id
+        WHERE c.tsv @@ to_tsquery('bimoffice', ?) AND d.deleted_at IS NULL
+    """
+    params: list = [tsq, tsq]
+    for col, val in (("unit", unit), ("discipline", discipline), ("project", project)):
+        if val:
+            sql += f" AND lower(d.{col}) = lower(?)"
+            params.append(val)
+    sql += " ORDER BY ts_rank(c.tsv, to_tsquery('bimoffice', ?)) DESC, c.id LIMIT ?"
+    params += [tsq, limit]
     with get_conn() as conn:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]

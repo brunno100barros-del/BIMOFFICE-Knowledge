@@ -8,7 +8,7 @@ from backend.database.db import get_conn, init_db
 from backend.document_processing.pdf_parser import PdfWithoutText, parse_pdf
 from backend.semantic_search import hybrid, vector_store
 from backend.services import library_service as svc
-from tests.conftest import PDF_PAGES, make_docx, make_pdf
+from tests.conftest import PDF_PAGES, make_docx, make_pdf, requires_sqlite
 
 
 def _imp_pdf(tmp_path, name="m.pdf", pages=PDF_PAGES, **meta):
@@ -86,6 +86,7 @@ def test_source_ref_is_stored(tmp_path):
     assert doc["source"] == "gdrive" and doc["source_ref"] == ref
 
 
+@requires_sqlite
 def test_migration_adds_columns_to_old_database(tmp_path, monkeypatch):
     old = tmp_path / "old.db"
     conn = sqlite3.connect(old)

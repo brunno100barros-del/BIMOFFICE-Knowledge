@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,14 @@ def isolated_data(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "database" / "t.db")
     monkeypatch.setattr(config, "PROJECT_FILES_DIR", tmp_path / "projects")
     monkeypatch.setattr(config, "START_JOB_WORKER", False)  # testes executam a fila com jobs.run_pending()
+    # Para rodar a MESMA suíte no PostgreSQL: BIMOFFICE_TEST_DATABASE_URL=postgresql://...
+    pg = os.environ.get("BIMOFFICE_TEST_DATABASE_URL", "")
+    monkeypatch.setattr(config, "DATABASE_URL", pg)
+    if pg:
+        import psycopg
+        with psycopg.connect(pg, autocommit=True) as c:  # banco limpo a cada teste
+            c.execute("DROP SCHEMA IF EXISTS public CASCADE")
+            c.execute("CREATE SCHEMA public")
     config.ensure_dirs()
     init_db()
 
@@ -134,3 +143,7 @@ PDF_PAGES = [
     ["MEMORIAL DESCRITIVO - SENAI", "4 PINTURA",
      "As paredes internas receberão tinta acrílica fosca em duas demãos.", "Página 3 de 3"],
 ]
+
+
+requires_sqlite = pytest.mark.skipif(bool(os.environ.get("BIMOFFICE_TEST_DATABASE_URL")),
+                                     reason="teste específico do arquivo SQLite")

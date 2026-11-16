@@ -96,7 +96,7 @@ def test_delete_is_soft_and_restore_works(tmp_path):
     svc.delete_document(doc["id"])
     assert svc.list_documents() == []
     assert svc.search_text("sanitarios") == []
-    assert list(config.BACKUPS_DIR.glob("*.db"))  # backup antes de excluir
+    assert list(config.BACKUPS_DIR.glob("*.db")) + list(config.BACKUPS_DIR.glob("*.dump"))  # backup antes de excluir (SQLite .db / PostgreSQL .dump)
     assert (config.DOCUMENTS_DIR / f"{doc['sha256']}.docx").exists()
     # restaurar reindexa e devolve o documento às buscas
     svc.restore_document(doc["id"])

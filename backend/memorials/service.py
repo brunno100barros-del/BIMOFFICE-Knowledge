@@ -250,7 +250,7 @@ def regenerate_chapter(cid: int, replace_text: bool = False) -> dict:
     text = gen if replace_text or not c["edited"] else c["text"]
     with get_conn() as conn:
         conn.execute("""UPDATE memorial_chapters SET generated_text=?, text=?, facts=?, pending=?, tables_json=?,
-                        status=CASE WHEN ? THEN 'rascunho' ELSE status END, updated_at=datetime('now') WHERE id=?""",
+                        status=CASE WHEN ?=1 THEN 'rascunho' ELSE status END, updated_at=datetime('now') WHERE id=?""",
                      (gen, text, _j(fresh["facts"]), _j(fresh["pending"]), _j(fresh["tables"]),
                       1 if text != c["text"] else 0, cid))
         _version(conn, cid, "regerado a partir do IFC" + (" (texto substituído)" if text != c["text"] else ""), c["title"], text)

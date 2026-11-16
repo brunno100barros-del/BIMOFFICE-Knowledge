@@ -1,6 +1,14 @@
-"""Banco de dados SQLite (metadados, seções, trechos) + FTS5 (busca textual)."""
+"""Banco de dados: SQLite (local/desenvolvimento) ou PostgreSQL (produção na nuvem).
+
+- SQLite: comportamento idêntico às versões anteriores (mesma conexão sqlite3, FTS5).
+- PostgreSQL: ativado por BIMOFFICE_DATABASE_URL=postgresql://... . Uma camada fina traduz as poucas
+  diferenças de SQL (marcadores, datas, LIKE, NOCASE, id gerado). A busca textual usa tsvector+unaccent
+  (backend/database/migrations/postgres_0001_base.sql), com o mesmo comportamento do FTS5.
+- Migrações versionadas (tabela schema_migrations): cada versão é aplicada uma única vez.
+"""
 from __future__ import annotations
 
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -212,7 +220,7 @@ CREATE INDEX IF NOT EXISTS ix_mver_chapter ON memorial_versions(chapter_id);
 """
 
 
-# Colunas acrescentadas depois da 1ª versão (migração automática, sem perder dados).
+# Colunas acrescentadas depois da 1ª versão do SQLite (migração automática, sem perder dados).
 MIGRATIONS = {
     "documents": [
         ("file_type", "TEXT NOT NULL DEFAULT 'docx'"),      # docx | pdf
@@ -220,9 +228,14 @@ MIGRATIONS = {
         ("source_ref", "TEXT NOT NULL DEFAULT '{}'"),       # JSON: pasta/arquivo de origem
     ],
 }
+MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
+def dialect() -> str:
+    return "postgres" if config.DATABASE_URL.startswith(("postgres://", "postgresql://")) else "sqlite"
+
+
+def _migrate(conn) -> None:
     for table, cols in MIGRATIONS.items():
         existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, ddl in cols:
@@ -230,21 +243,135 @@ def _migrate(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
+def _versioned(d: str) -> list[tuple[str, str]]:
+    """Migrações em arquivos: migrations/<dialeto>_<versão>_<nome>.sql (ordem pelo nome)."""
+    out = []
+    for f in sorted(MIGRATIONS_DIR.glob(f"{d}_*.sql")):
+        out.append((f.stem.split("_", 1)[1], f.read_text(encoding="utf-8")))
+    return out
+
+
 def init_db(db_path: Path | None = None) -> None:
+    """Cria/atualiza o esquema. Pode ser chamado várias vezes (idempotente)."""
+    if dialect() == "postgres":
+        with get_conn() as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL "
+                         "DEFAULT (to_char(now() at time zone 'utc', 'YYYY-MM-DD HH24:MI:SS')))")
+        for version, sql in _versioned("postgres"):
+            with get_conn() as conn:
+                conn.execute("SELECT pg_advisory_xact_lock(424242)")  # dois serviços iniciando juntos
+                if conn.execute("SELECT 1 FROM schema_migrations WHERE version=?", (version,)).fetchone():
+                    continue
+                conn.raw.execute(sql)
+                conn.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
+        return
     path = db_path or config.DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     try:
         conn.executescript(SCHEMA)
         _migrate(conn)
+        conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, "
+                     "applied_at TEXT NOT NULL DEFAULT (datetime('now')))")
+        done = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}
+        for version, sql in _versioned("sqlite"):
+            if version not in done:
+                conn.executescript(sql)
+                conn.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
         conn.commit()
     finally:
         conn.close()
 
 
+# ------------------------------------------------------------------ PostgreSQL
+_PG_NOW = "to_char(now() at time zone 'utc', 'YYYY-MM-DD HH24:MI:SS')"
+_NOCASE = re.compile(r"([\w\.]+)\s*=\s*\?\s+COLLATE NOCASE")
+_INSERT = re.compile(r"^\s*INSERT\s+INTO\s+(\w+)", re.I)
+_NO_ID_TABLES = {"schema_migrations", "project_members"}
+
+
+def pg_sql(sql: str) -> str:
+    """Traduz o SQL usado no projeto (dialeto SQLite) para PostgreSQL."""
+    s = sql.replace("%", "%%")
+    s = s.replace("datetime('now')", _PG_NOW)
+    s = _NOCASE.sub(r"lower(\1) = lower(?)", s)
+    s = re.sub(r"\bIS NOT \?", "IS DISTINCT FROM ?", s)
+    s = re.sub(r"\bLIKE\b", "ILIKE", s)
+    return s.replace("?", "%s")
+
+
+class Row(tuple):
+    """Linha com acesso por posição e por nome (como sqlite3.Row)."""
+
+    def __new__(cls, values, names):
+        r = super().__new__(cls, values)
+        r._names = names
+        return r
+
+    def __getitem__(self, k):
+        if isinstance(k, str):
+            return tuple.__getitem__(self, self._names.index(k))
+        return tuple.__getitem__(self, k)
+
+    def keys(self):
+        return list(self._names)
+
+
+def _row_factory(cursor):
+    names = [c.name for c in cursor.description] if cursor.description else []
+    return lambda values: Row([bytes(v) if isinstance(v, memoryview) else v for v in values], names)
+
+
+class _PgCursor:
+    def __init__(self, cur, lastrowid=None):
+        self._cur = cur
+        self.lastrowid = lastrowid
+        self.rowcount = cur.rowcount
+
+    def fetchone(self):
+        return self._cur.fetchone() if self._cur.description else None
+
+    def fetchall(self):
+        return self._cur.fetchall() if self._cur.description else []
+
+    def __iter__(self):
+        return iter(self.fetchall())
+
+
+class PgConnection:
+    def __init__(self, raw):
+        self.raw = raw
+
+    def execute(self, sql: str, params=()):
+        q = pg_sql(sql)
+        m = _INSERT.match(sql)
+        wants_id = bool(m) and m.group(1).lower() not in _NO_ID_TABLES and "RETURNING" not in sql.upper()
+        cur = self.raw.cursor(row_factory=_row_factory)
+        cur.execute(q + (" RETURNING id" if wants_id else ""), tuple(params))
+        rid = cur.fetchone()[0] if wants_id else None
+        return _PgCursor(cur, rid)
+
+    def executemany(self, sql: str, seq):
+        cur = self.raw.cursor()
+        cur.executemany(pg_sql(sql), [tuple(p) for p in seq])
+        return _PgCursor(cur)
+
+
 @contextmanager
-def get_conn(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
+def get_conn(db_path: Path | None = None) -> Iterator:
     """Abre uma conexão com transação: commit ao sair, rollback em caso de erro."""
+    if dialect() == "postgres" and db_path is None:
+        import psycopg
+        raw = psycopg.connect(config.DATABASE_URL)
+        try:
+            yield PgConnection(raw)
+            raw.commit()
+        except Exception:
+            raw.rollback()
+            raise
+        finally:
+            raw.close()
+        return
     path = db_path or config.DB_PATH
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
