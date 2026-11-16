@@ -1,0 +1,291 @@
+{
+ "ok": true,
+ "steps": {
+  "sqlite": {
+   "ok": true,
+   "version": "3.54.1",
+   "ms": 101
+  },
+  "e5": {
+   "ok": true,
+   "load_ms": 4219,
+   "index_33_ms": 11927,
+   "query_ms_avg": 70,
+   "cos_vs_python_query": 0.9878,
+   "cos_vs_python_passage": 0.9829,
+   "same_top1": "8/10",
+   "same_top3_set": "6/10",
+   "overlap_top5": "46/50",
+   "res": {
+    "paredes dos banheiros com placas cerâmicas": {
+     "browser": [
+      11,
+      7,
+      4,
+      15,
+      6
+     ],
+     "python": [
+      11,
+      7,
+      4,
+      15,
+      6
+     ]
+    },
+    "proteção contra descargas atmosféricas": {
+     "browser": [
+      13,
+      10,
+      30,
+      7,
+      14
+     ],
+     "python": [
+      10,
+      30,
+      13,
+      7,
+      24
+     ]
+    },
+    "concreto das sapatas": {
+     "browser": [
+      20,
+      21,
+      25,
+      19,
+      23
+     ],
+     "python": [
+      20,
+      23,
+      19,
+      21,
+      25
+     ]
+    },
+    "tubulação de água fria": {
+     "browser": [
+      27,
+      30,
+      14,
+      23,
+      28
+     ],
+     "python": [
+      27,
+      30,
+      23,
+      28,
+      33
+     ]
+    },
+    "impermeabilização da laje": {
+     "browser": [
+      11,
+      23,
+      8,
+      30,
+      10
+     ],
+     "python": [
+      11,
+      23,
+      8,
+      10,
+      30
+     ]
+    },
+    "pintura das paredes internas": {
+     "browser": [
+      15,
+      12,
+      5,
+      11,
+      6
+     ],
+     "python": [
+      15,
+      12,
+      5,
+      6,
+      11
+     ]
+    },
+    "esquadrias de alumínio": {
+     "browser": [
+      13,
+      14,
+      12,
+      22,
+      10
+     ],
+     "python": [
+      13,
+      14,
+      12,
+      10,
+      22
+     ]
+    },
+    "quadro de distribuição elétrica": {
+     "browser": [
+      31,
+      14,
+      10,
+      30,
+      9
+     ],
+     "python": [
+      31,
+      10,
+      26,
+      30,
+      14
+     ]
+    },
+    "forro de gesso": {
+     "browser": [
+      5,
+      11,
+      8,
+      10,
+      12
+     ],
+     "python": [
+      11,
+      5,
+      8,
+      12,
+      10
+     ]
+    },
+    "drenagem de águas pluviais": {
+     "browser": [
+      30,
+      10,
+      8,
+      23,
+      17
+     ],
+     "python": [
+      30,
+      10,
+      23,
+      8,
+      26
+     ]
+    }
+   }
+  },
+  "ifc": {
+   "ok": true,
+   "version": "0.0.79",
+   "files": {
+    "Escola_SENAI_Bloco_B_EXEMPLO.ifc": {
+     "schema": "IFC4",
+     "extraCls": {
+      "IFCBUILDINGSTOREY": 3,
+      "IFCBUILDING": 1,
+      "IFCSITE": 1
+     },
+     "elements_py": 197,
+     "elements_js": 202,
+     "missing": 0,
+     "extra": 5,
+     "class_mismatch": 0,
+     "props_equal": "77/77",
+     "props_diff_examples": [],
+     "meshes": 16,
+     "ms": 136
+    },
+    "ifc2x3_building-architecture.ifc": {
+     "schema": "IFC2X3",
+     "extraCls": {
+      "IFCBUILDINGSTOREY": 1,
+      "IFCBUILDING": 1,
+      "IFCSITE": 1
+     },
+     "elements_py": 16,
+     "elements_js": 19,
+     "missing": 0,
+     "extra": 3,
+     "class_mismatch": 0,
+     "props_equal": "5/5",
+     "props_diff_examples": [],
+     "meshes": 12,
+     "ms": 44
+    },
+    "ifc2x3_building-structural.ifc": {
+     "schema": "IFC2X3",
+     "extraCls": {
+      "IFCBUILDINGSTOREY": 1,
+      "IFCBUILDING": 1,
+      "IFCSITE": 1
+     },
+     "elements_py": 17,
+     "elements_js": 20,
+     "missing": 0,
+     "extra": 3,
+     "class_mismatch": 0,
+     "props_equal": "0/0",
+     "props_diff_examples": [],
+     "meshes": 16,
+     "ms": 90
+    },
+    "ifc4_building-architecture.ifc": {
+     "schema": "IFC4",
+     "extraCls": {
+      "IFCBUILDINGSTOREY": 1,
+      "IFCBUILDING": 1,
+      "IFCSITE": 2
+     },
+     "elements_py": 15,
+     "elements_js": 19,
+     "missing": 0,
+     "extra": 4,
+     "class_mismatch": 0,
+     "props_equal": "5/5",
+     "props_diff_examples": [],
+     "meshes": 12,
+     "ms": 25
+    },
+    "ifc4_building-hvac.ifc": {
+     "schema": "IFC4",
+     "extraCls": {
+      "IFCBUILDINGSTOREY": 1,
+      "IFCBUILDING": 1,
+      "IFCSITE": 2
+     },
+     "elements_py": 6,
+     "elements_js": 10,
+     "missing": 0,
+     "extra": 4,
+     "class_mismatch": 0,
+     "props_equal": "0/0",
+     "props_diff_examples": [],
+     "meshes": 5,
+     "ms": 11
+    },
+    "ifc4x3_building-architecture.ifc": {
+     "schema": "IFC4X3_ADD2",
+     "extraCls": {
+      "IFCBUILDINGSTOREY": 1,
+      "IFCBUILDING": 1,
+      "IFCSITE": 2
+     },
+     "elements_py": 15,
+     "elements_js": 19,
+     "missing": 0,
+     "extra": 4,
+     "class_mismatch": 0,
+     "props_equal": "5/5",
+     "props_diff_examples": [],
+     "meshes": 12,
+     "ms": 16
+    }
+   }
+  }
+ }
+}
