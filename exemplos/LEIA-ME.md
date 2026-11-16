@@ -4,7 +4,7 @@ Tudo nesta pasta é **FICTÍCIO**, criado para demonstrar e testar o sistema. N�
 
 | Pasta | Conteúdo |
 |---|---|
-| `projeto_exemplo/Escola_SENAI_Bloco_B_EXEMPLO.ifc` | IFC4 de uma escola de 2 pavimentos: 197 elementos (arquitetura, estrutura de concreto, cobertura metálica, hidrossanitário, elétrica, climatização). Tem **lacunas propositais** (vigas sem volume, divisória sem quantitativos, 2 elementos genéricos) para mostrar as pendências. |
+| `projeto_exemplo/Escola_SENAI_Bloco_B_EXEMPLO.ifc` | IFC4 de uma escola de 2 pavimentos: 197 elementos (arquitetura, estrutura de concreto, cobertura metálica, hidrossanitário, elétrica, climatização), **todos com forma 3D simples e cores** (196 de 197; a "Cobertura" é só o agrupador do telhado). Tem **lacunas propositais** (vigas sem volume, divisória sem quantitativos, 2 elementos genéricos) para mostrar as pendências. |
 | `memoriais_referencia/` | 3 memoriais de referência em DOCX (arquitetura e acabamentos; estrutura e fundações; instalações), com normas ABNT reais citadas. Textos fictícios. |
 | `saida/` | O memorial **produzido pelo sistema** a partir dos itens acima (minuta DOCX, ainda **não revisada**). |
 
@@ -14,6 +14,8 @@ Abra https://brunno100barros-del.github.io/BIMOFFICE-Knowledge/ e clique em
 memorial, biblioteca) são as respostas reais do sistema para este exemplo, gravadas em `frontend/demo/` por
 `python scripts/exemplo/gerar_demo_estatico.py`. Enviar arquivos, editar, gerar e pesquisar por significado
 exigem o programa instalado (a pesquisa não é simulada na demonstração).
+No menu **Memorial 3D** o IFC aparece em 3D: clique num capítulo para destacar os elementos de onde o texto saiu,
+ou num elemento para ver a ficha técnica e em quais capítulos ele está descrito.
 Ao mudar o sistema ou o exemplo, rode o script de novo para atualizar a demonstração.
 
 ## Como reproduzir no seu computador

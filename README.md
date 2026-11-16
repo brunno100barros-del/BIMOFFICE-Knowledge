@@ -103,6 +103,11 @@ python -m pytest -q
 - PDF: tabelas viram texto corrido; títulos e parágrafos são reconstruídos por heurística.
 - Destaque de termos na pesquisa marca prefixos ("forro" em "Forros").
 
+## Memorial 3D (v0.7)
+O IFC aparece em 3D no navegador (menu **Memorial 3D**): cada capítulo do memorial fica ligado, pelo GlobalId, aos
+elementos de onde saiu; clicar num elemento mostra a ficha técnica e os capítulos que o descrevem. Também na
+demonstração do GitHub Pages (projeto exemplo). Detalhes: [docs/MEMORIAL.md](docs/MEMORIAL.md).
+
 ## Nuvem (v0.6)
 PostgreSQL (produção) ou SQLite (local), arquivos em S3 compatível ou disco, worker separado
 (`python -m backend.worker`), login com papéis e equipes por projeto, auditoria, Docker

@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     jobs.stop_worker()
 
 
-app = FastAPI(title="BIMOFFICE Knowledge", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="BIMOFFICE Knowledge", version="0.7.0", lifespan=lifespan)
 
 
 class AccessMiddleware(BaseHTTPMiddleware):

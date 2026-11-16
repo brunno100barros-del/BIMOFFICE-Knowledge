@@ -36,7 +36,7 @@ def _j(v) -> str:
     return json.dumps(v, ensure_ascii=False)
 
 
-JSON_COLS = ("facts", "pending", "tables_json", "suggestions", "inserted_refs")
+JSON_COLS = ("facts", "pending", "tables_json", "suggestions", "inserted_refs", "element_ids")
 
 
 def _chapter_row(r) -> dict:
@@ -99,9 +99,9 @@ def create_memorial(project_id: int, model_id: int | None = None, title: str | N
             gen = _text(c["paragraphs"])
             cur = conn.execute(
                 """INSERT INTO memorial_chapters(memorial_id, position, key, title, generated_text, text, facts,
-                   pending, tables_json, suggestions, query) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                   pending, tables_json, suggestions, query, element_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (mid, i, c["key"], c["title"], gen, gen, _j(c["facts"]), _j(c["pending"]), _j(c["tables"]),
-                 _j(_suggest(c.get("query", ""))), c.get("query", "")))
+                 _j(_suggest(c.get("query", ""))), c.get("query", ""), _j(c.get("element_ids", []))))
             _version(conn, cur.lastrowid, "gerado a partir do IFC", c["title"], gen)
         projects.history(project_id, "memorial gerado", {"memorial": title, "capítulos": len(chapters),
                                                           "modelo": model["original_filename"] if model else None}, conn)
@@ -251,9 +251,9 @@ def regenerate_chapter(cid: int, replace_text: bool = False) -> dict:
     gen = _text(fresh["paragraphs"])
     text = gen if replace_text or not c["edited"] else c["text"]
     with get_conn() as conn:
-        conn.execute("""UPDATE memorial_chapters SET generated_text=?, text=?, facts=?, pending=?, tables_json=?,
+        conn.execute("""UPDATE memorial_chapters SET generated_text=?, text=?, facts=?, pending=?, tables_json=?, element_ids=?,
                         status=CASE WHEN ?=1 THEN 'rascunho' ELSE status END, updated_at=datetime('now') WHERE id=?""",
-                     (gen, text, _j(fresh["facts"]), _j(fresh["pending"]), _j(fresh["tables"]),
+                     (gen, text, _j(fresh["facts"]), _j(fresh["pending"]), _j(fresh["tables"]), _j(fresh.get("element_ids", [])),
                       1 if text != c["text"] else 0, cid))
         _version(conn, cid, "regerado a partir do IFC" + (" (texto substituído)" if text != c["text"] else ""), c["title"], text)
     return get_chapter(cid)

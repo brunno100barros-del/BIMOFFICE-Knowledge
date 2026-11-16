@@ -34,7 +34,7 @@ Capítulos sem nenhum elemento no IFC são omitidos (exceto os "complementares",
 
 ## Tabelas
 `memorials` (projeto, modelo, título) · `memorial_chapters` (posição, chave, título, generated_text, text,
-status, facts, pending, tables_json, suggestions, inserted_refs, query) · `memorial_versions` (histórico).
+status, facts, pending, tables_json, suggestions, inserted_refs, query, element_ids) · `memorial_versions` (histórico).
 
 ## Limitações (v0.5)
 - Texto gerado é **descritivo e direto** (frases montadas por regras), não redação elaborada — o Gemini
@@ -44,3 +44,23 @@ status, facts, pending, tables_json, suggestions, inserted_refs, query) · `memo
   institucional (cabeçalho/rodapé/estilos próprios) nem insere imagens.
 - Sem edição de quadros (ambientes/esquadrias) na interface: são regerados do IFC.
 - Nome do arquivo exportado sem acentos (compatibilidade); o conteúdo mantém os acentos.
+
+## Memorial 3D (v0.7)
+- **Vínculo capítulo ↔ elementos do IFC:** ao gerar (ou regerar) um capítulo, o sistema grava em `element_ids` os
+  **GlobalIds** de todos os elementos que a regra do capítulo usou (`Ctx.where`), e cada dado em `facts` guarda a lista
+  completa dos GlobalIds de onde veio. O memorial guarda o modelo/versão (`memorials.model_id`). Consultar outro grupo
+  só para escrever uma frase (ex.: cobertura citando a estrutura metálica) **não** cria vínculo.
+- **Tela "Memorial 3D"** (`#/modelo3d/<modelo>?memorial=<id>&cap=<capítulo>`): o IFC original é aberto **no navegador**
+  (web-ifc + three.js, em `frontend/vendor/bim3d/`, licenças MIT/MPL-2.0 em `LICENCAS.txt`). Capítulo → destaca os
+  elementos e enquadra; elemento (clique no 3D ou na lista) → ficha técnica (mesmos dados do inventário, com origem e
+  método de cada quantidade) + "Descrito no memorial" (capítulos que usam o elemento). Filtros por pavimento e disciplina,
+  vistas, ambientes (IfcSpace) liga/desliga, painéis recolhíveis. Botões "Ver em 3D" (inventário), "Memorial 3D"
+  (memorial) e "Ver no 3D (n)" em cada capítulo.
+- Se o memorial foi gerado de outra versão do modelo, a tela avisa e marca os GlobalIds que não existem nesta versão.
+- **Somente leitura:** a tela não altera o IFC nem o memorial.
+
+### Limitações (v0.7)
+- Elementos sem geometria no IFC aparecem na lista do capítulo como "sem forma 3D" (ex.: IfcRoof que só agrupa).
+- Modelos muito grandes dependem da memória/placa de vídeo do computador (uma malha por elemento, sem otimização LOD).
+- Comparação entre versões do IFC (diff) e marcação automática de capítulos afetados: **ainda não** (próxima etapa).
+- Os vínculos de memoriais gerados **antes** da v0.7 ficam vazios até o capítulo ser regerado.

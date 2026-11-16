@@ -29,7 +29,7 @@ Uma etapa por vez, testando antes de avançar. Ao fim de cada etapa informar: o 
 implementado, arquivos criados/modificados, como testar, limitações. Rodar `python -m pytest -q`
 antes de cada commit; commits pequenos e em português.
 
-## Estado atual (v0.6)
+## Estado atual (v0.7)
 - Backups: branches `backup/pre-ifc-2026-11-16` (antes do IFC), `backup/pre-evolucao-2026-11-13`, `backup/main-2026-11-13`.
 - v0.3 intacta: biblioteca DOCX/PDF, pesquisa híbrida E5+FTS5, interface Liquid Glass, GitHub Pages.
 - **Fase 0 (IFC) concluída:** IfcOpenShell 0.9.0.post1 (LGPL), Python 3.13; Windows testado de verdade no
@@ -61,6 +61,12 @@ antes de cada commit; commits pequenos e em português.
   Testes em 4 modos: `BIMOFFICE_TEST_DATABASE_URL=postgresql://...` e/ou `BIMOFFICE_TEST_STORAGE=s3`.
   Próximas etapas do pedido de nuvem: visualizador 3D + ficha, vínculos memorial↔GlobalId/versão + diff, modo
   Memorial 3D, barra de navegação superior, Gemini e Drive. Hospedagem: aguardando decisão/aprovação de custos.
+- **v0.7 Memorial 3D concluído e testado:** capítulos gravam `element_ids` (GlobalIds usados; migração 0004) e
+  `facts[].global_ids` completos; `frontend/assets/viewer3d.js` (three.js + web-ifc em `frontend/vendor/bim3d/`,
+  pacote gerado com esbuild) e rota `#/modelo3d`; IFC exemplo com forma 3D e cores em todos os elementos
+  (`scripts/exemplo/gerar_ifc_exemplo.py`); demo regenerada. Testes: `test_chapters_link_to_ifc_global_ids`,
+  `tests/test_demo_static.py`; E2E Chromium (demo e backend real). Versão grátis (navegador + Drive + Gemini):
+  viabilidade medida em `docs/NAVEGADOR_DRIVE.md`; aguarda Client ID do Google (conta dedicada que o usuário vai criar).
 - **Pendente / depende do usuário:** validar o exemplo; memoriais e IFCs reais; chave Gemini + autorização para enviar
   dados ao Google (Fase 3); credenciais OAuth do Drive; servidor do backend online.
 

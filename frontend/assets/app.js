@@ -307,11 +307,13 @@
   }
   async function render() {
     routeSeq++;
+    dispose3d();
     const dr = document.getElementById("drawer");
     if (dr) dr.classList.remove("open");
     const r = parseHash();
     const fn = API.online === "login" ? routes.login : (routes[r.name] || routes.dashboard);
     const navName = { documento: "biblioteca", projeto: "projetos", memorial: "memoriais" }[r.name] || r.name;
+    document.body.classList.toggle("wide", r.name === "modelo3d");
     $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName));
     const view = $("#view");
     view.style.animation = "none"; void view.offsetWidth; view.style.animation = "";
@@ -828,6 +830,7 @@
         <div class="page-head"><div><p class="eyebrow">Inventário técnico do modelo</p><h2>${esc(m.original_filename)} <span class="muted">v${m.version}</span></h2>
           <p class="muted small">${esc(m.schema_name)} · ${esc(m.header.originating_system || m.header.application || "aplicativo não informado")} · lido em ${fmtNum(m.parse_seconds)} s · ${fmtDate(m.processed_at)}</p></div>
           <div class="actions">${models.length > 1 ? `<select id="modelSel">${models.map((x) => `<option value="${x.id}" ${x.id === m.id ? "selected" : ""}>${esc(x.original_filename)} v${x.version} (${esc(x.schema_name)})</option>`).join("")}</select>` : ""}
+          <a class="btn sm primary" href="#/modelo3d/${m.id}">${icon("layers")}Ver em 3D</a>
           <button class="btn sm" id="expInv">${icon("external")}Exportar JSON</button></div></div>
         <div class="grid stats" style="margin-top:16px">
           <div class="stat"><span class="num">${fmtNum(s.elements_total, 0)}</span><span class="lbl">Elementos</span><span class="hint">${s.auxiliary_ignored} auxiliares ignorados (aberturas etc.)</span></div>
@@ -915,21 +918,10 @@
     load();
   }
 
-  async function openElement(eid) {
-    let el;
-    try { el = await API.get(`/api/ifc-elements/${eid}`); } catch (e) { toast(e.message, "err"); return; }
-    let d = $("#drawer");
-    if (!d) {
-      d = document.createElement("aside");
-      d.id = "drawer"; d.className = "drawer glass-strong"; d.setAttribute("role", "dialog"); d.setAttribute("aria-label", "Detalhes do elemento");
-      document.body.appendChild(d);
-      d.addEventListener("click", (e) => { if (e.target.closest("[data-close-drawer]")) d.classList.remove("open"); });
-      document.addEventListener("keydown", (e) => { if (e.key === "Escape") d.classList.remove("open"); });
-    }
+  // ficha técnica do elemento (dados do IFC, com origem e método de cada quantidade)
+  function elementSheet(el) {
     const psets = Object.entries(el.psets || {});
-    d.innerHTML = `
-      <header class="modal-head"><div style="flex:1"><p class="eyebrow">${esc(el.ifc_class)}</p><h2>${esc(el.name || "(sem nome)")}</h2></div>
-        <button class="icon-btn" data-close-drawer aria-label="Fechar">${icon("x")}</button></header>
+    return `
       <dl class="kv">
         <dt>GlobalId</dt><dd><code>${esc(el.global_id)}</code></dd>
         ${el.type_name ? `<dt>Tipo</dt><dd>${esc(el.type_name)} <span class="muted small">${esc(el.type_class || "")}</span></dd>` : ""}
@@ -949,7 +941,24 @@
       <div class="drawer-sec"><h3>Quantidades</h3>${el.quantities && el.quantities.length ? `<table class="docs-table"><thead><tr><th>Nome</th><th>Valor</th><th>Origem</th></tr></thead><tbody>
         ${el.quantities.map((q) => `<tr><td>${esc(q.name)}<div class="muted small">${esc(q.source || "")}</div></td><td><b>${fmtNum(q.value, 4)} ${esc(q.unit)}</b></td><td>${methodBadge(q.method)}${q.note ? `<div class="muted small">${esc(q.note)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : `<p class="muted">Nenhuma quantidade no IFC e nenhuma calculada.</p>`}</div>
       <div class="drawer-sec"><h3>Property Sets (${psets.length})</h3>${psets.map(([n, props]) => `<details><summary>${esc(n)}</summary><table class="docs-table"><tbody>
-        ${Object.entries(props || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`).join("")}</tbody></table></details>`).join("") || `<p class="muted">Nenhum Property Set.</p>`}</div>`;
+        ${Object.entries(props || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`).join("")}</tbody></table></details>`).join("") || `<p class="muted">Nenhum Property Set.</p>`}</div>`
+  }
+
+  async function openElement(eid) {
+    let el;
+    try { el = await API.get(`/api/ifc-elements/${eid}`); } catch (e) { toast(e.message, "err"); return; }
+    let d = $("#drawer");
+    if (!d) {
+      d = document.createElement("aside");
+      d.id = "drawer"; d.className = "drawer glass-strong"; d.setAttribute("role", "dialog"); d.setAttribute("aria-label", "Detalhes do elemento");
+      document.body.appendChild(d);
+      d.addEventListener("click", (e) => { if (e.target.closest("[data-close-drawer]")) d.classList.remove("open"); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") d.classList.remove("open"); });
+    }
+    d.innerHTML = `
+      <header class="modal-head"><div style="flex:1"><p class="eyebrow">${esc(el.ifc_class)}</p><h2>${esc(el.name || "(sem nome)")}</h2></div>
+        <button class="icon-btn" data-close-drawer aria-label="Fechar">${icon("x")}</button></header>
+      ${elementSheet(el)}`;
     requestAnimationFrame(() => d.classList.add("open"));
   }
 
@@ -991,7 +1000,8 @@
     view.innerHTML = `
       <div class="page-head"><div><p class="eyebrow"><a href="#/projeto/${m.project_id}">← Projeto</a> · Memorial em elaboração</p>
         <h1 id="memTitle">${esc(m.title)}</h1><p class="sub" id="memProg"></p></div>
-        <div class="actions"><button class="btn" id="renMem">${icon("gear")}Renomear</button>
+        <div class="actions">${m.model_id ? `<a class="btn" href="#/modelo3d/${m.model_id}?memorial=${mid}">${icon("layers")}Memorial 3D</a>` : ""}
+          <button class="btn" id="renMem">${icon("gear")}Renomear</button>
           <button class="btn" id="expDraft">${icon("external")}Exportar minuta (DOCX)</button>
           <button class="btn primary" id="expFinal">${icon("check")}Exportar final</button></div></div>
       <div class="notice info">${icon("info")}<div><b>Como funciona:</b> o texto de cada capítulo foi montado <b>só com dados do modelo IFC</b> (veja “Dados do IFC usados”).
@@ -1007,9 +1017,11 @@
       $("#expFinal").disabled = !m.ready_for_final;
       $("#expFinal").title = m.ready_for_final ? "" : "Aprove todos os capítulos para exportar a versão final";
       $("#memIdx").innerHTML = m.chapters.map((c, i) => `<li><a href="javascript:void 0" data-go="${c.id}"><span class="st-dot ${c.status === "aprovado" ? "ok" : ""}"></span>${i + 1} ${esc(c.title)}</a></li>`).join("");
-      $("#memChs").innerHTML = m.chapters.map((c, i) => chapterCard(c, i + 1)).join("");
+      $("#memChs").innerHTML = m.chapters.map((c, i) => chapterCard(c, i + 1, m)).join("");
     };
     draw();
+    const wantCap = r.params.get("cap");
+    if (wantCap) { const el = document.querySelector(`[data-ch="${CSS.escape(wantCap)}"]`); if (el) setTimeout(() => el.scrollIntoView({ block: "start" }), 50); }
     const reload = async () => { m = await API.get(`/api/memorials/${mid}`); draw(); };
     const replaceChapter = (c) => {
       const i = m.chapters.findIndex((x) => x.id === c.id);
@@ -1017,7 +1029,7 @@
       m.approved = m.chapters.filter((x) => x.status === "aprovado").length;
       m.ready_for_final = m.approved === m.chapters.length;
       const el = document.querySelector(`[data-ch="${c.id}"]`);
-      if (el) el.outerHTML = chapterCard(c, i + 1);
+      if (el) el.outerHTML = chapterCard(c, i + 1, m);
       $("#memProg").textContent = `${m.approved} de ${m.chapters.length} capítulos aprovados`;
       $("#expFinal").disabled = !m.ready_for_final;
       const dot = document.querySelector(`[data-go="${c.id}"] .st-dot`);
@@ -1081,7 +1093,173 @@
     });
   };
 
-  function chapterCard(c, n) {
+  // ------------------------------------------------------------------ Memorial 3D (modelo IFC + capítulos)
+  // Liga cada capítulo aos elementos do IFC pelo GlobalId (gravado na geração do memorial) e mostra a
+  // ficha técnica de cada elemento. Só lê: nada aqui altera o IFC nem o memorial.
+  let viewer3d = null;
+  const dispose3d = () => { if (viewer3d) { try { viewer3d.dispose(); } catch { /* */ } viewer3d = null; } };
+
+  async function pick3dTarget(r) {
+    const mid = parseInt(r.params.get("memorial") || "", 10);
+    if (r.arg) return { modelId: parseInt(r.arg, 10), mid: isNaN(mid) ? null : mid };
+    const ms = await API.get("/api/memorials");            // sem modelo indicado: o memorial mais recente
+    const withModel = ms.find((x) => x.model_id) || null;
+    if (withModel) return { modelId: withModel.model_id, mid: withModel.id };
+    const ps = await API.get("/api/projects");
+    for (const p of ps) {
+      const models = await API.get(`/api/projects/${p.id}/ifc-models`);
+      if (models.length) return { modelId: models[0].id, mid: null };
+    }
+    return { modelId: null, mid: null };
+  }
+
+  // todos os elementos do modelo, em páginas (o servidor entrega no máximo 1000 por vez)
+  async function allElements(modelId) {
+    const items = [];
+    for (let offset = 0; ; offset += 1000) {
+      const pg = await API.get(`/api/ifc-models/${modelId}/elements?limit=1000&offset=${offset}`);
+      items.push(...pg.items);
+      if (!pg.items.length || items.length >= pg.total) return { total: pg.total, items };
+    }
+  }
+
+  routes.modelo3d = async (view, r) => {
+    if (API.online !== true) { view.innerHTML = needBackend("O modelo 3D"); return; }
+    const seq = routeSeq;
+    const { modelId, mid: askedMid } = await pick3dTarget(r);
+    if (!modelId) {
+      view.innerHTML = `<div class="card empty">${icon("cube")}<h3>Nenhum modelo IFC processado</h3><p>Envie um IFC em um projeto para vê-lo em 3D.</p></div>`;
+      return;
+    }
+    const model = await API.get(`/api/ifc-models/${modelId}`);
+    const [elist, mems] = await Promise.all([
+      allElements(modelId),
+      API.get(`/api/projects/${model.project_id}/memorials`),
+    ]);
+    const mid = askedMid || ((mems.find((x) => x.model_id === modelId) || {}).id) || null;
+    const mem = mid ? await API.get(`/api/memorials/${mid}`) : null;
+    if (routeSeq !== seq) return;
+    const els = new Map(elist.items.map((e) => [e.global_id, e]));
+    const chapters = mem ? mem.chapters : [];
+    const chOf = (gid) => chapters.filter((c) => (c.element_ids || []).includes(gid));
+    const otherVersion = mem && mem.model_id && mem.model_id !== modelId;
+
+    view.innerHTML = `
+      <div class="page-head"><div><p class="eyebrow"><a href="#/projeto/${model.project_id}">← Projeto</a>${mem ? ` · <a href="#/memorial/${mem.id}">Memorial</a>` : ""} · Memorial 3D</p>
+        <h1>${esc(mem ? mem.title : model.original_filename)}</h1>
+        <p class="sub">Modelo «${esc(model.original_filename)}» v${model.version} · ${model.n_elements} elementos · ${esc(model.schema_name)}</p></div></div>
+      ${otherVersion ? `<div class="notice">${icon("alert")}<div>Este memorial foi gerado de <b>outra versão</b> do modelo. Os vínculos usam os GlobalIds daquela versão; elementos que não existem nesta aparecem como “não encontrados”.</div></div>` : ""}
+      <div class="m3d" id="m3d">
+        <aside class="card m3d-side" id="m3dCh" aria-label="Capítulos do memorial">
+          <div class="m3d-side-head"><h3>Capítulos</h3><button class="icon-btn" data-toggle="m3dCh" title="Recolher" aria-label="Recolher capítulos">‹</button></div>
+          ${mem ? `<p class="muted small">Clique num capítulo para destacar no 3D os elementos de onde o texto saiu.</p>
+            <ol class="m3d-list">${chapters.map((c, i) => {
+              const n = (c.element_ids || []).length;
+              return `<li><button type="button" data-ch="${c.id}" ${n ? "" : "disabled"}><span class="st-dot ${c.status === "aprovado" ? "ok" : ""}"></span>
+                <span class="t">${i + 1} ${esc(c.title)}</span><span class="badge" title="${n ? n + " elemento(s) do IFC" : "capítulo sem elementos do IFC"}">${n || "—"}</span></button></li>`;
+            }).join("")}</ol>`
+            : `<p class="muted small">Este modelo ainda não tem memorial. Gere um na página do projeto para ligar os capítulos ao 3D.</p>`}
+        </aside>
+        <section class="card m3d-view">
+          <div class="m3d-tools">
+            <button class="btn sm" data-v="all">${icon("cube")}Mostrar tudo</button>
+            <button class="btn sm" data-v="fit">${icon("search")}Enquadrar</button>
+            <select data-v="cam" aria-label="Vista"><option value="iso">Vista isométrica</option><option value="topo">Vista de topo</option><option value="frente">Vista frontal</option><option value="lado">Vista lateral</option></select>
+            <select data-v="storey" aria-label="Pavimento"><option value="">Todos os pavimentos</option>${[...new Set(elist.items.map((e) => e.storey).filter(Boolean))].map((s) => `<option>${esc(s)}</option>`).join("")}</select>
+            <select data-v="disc" aria-label="Disciplina"><option value="">Todas as disciplinas</option>${[...new Set(elist.items.map((e) => e.discipline).filter(Boolean))].sort().map((s) => `<option>${esc(s)}</option>`).join("")}</select>
+            <label class="chk"><input type="checkbox" data-v="spaces"> Ambientes</label>
+          </div>
+          <div class="m3d-canvas" id="m3dCanvas"><div class="m3d-load muted" id="m3dLoad">Carregando o modelo 3D…</div></div>
+          <p class="muted small m3d-help">Arraste para girar · botão direito ou Shift + arrastar para mover · roda do mouse para zoom · clique num elemento para ver a ficha.</p>
+        </section>
+        <aside class="card m3d-side" id="m3dInfo" aria-label="Detalhes"><div class="m3d-side-head"><h3>Detalhes</h3><button class="icon-btn" data-toggle="m3dInfo" title="Recolher" aria-label="Recolher detalhes">›</button></div>
+          <div id="m3dBody"><p class="muted small">Selecione um capítulo ou clique num elemento do modelo.</p></div></aside>
+      </div>`;
+
+    const body = $("#m3dBody");
+    let activeCh = null;
+    const setActiveBtn = () => $$("#m3dCh [data-ch]").forEach((b) => b.classList.toggle("on", activeCh && b.dataset.ch === String(activeCh.id)));
+
+    function showChapter(c, zoom = true) {
+      activeCh = c;
+      setActiveBtn();
+      const ids = c.element_ids || [];
+      const found = ids.filter((g) => viewer3d && viewer3d.has(g));
+      const noShape = ids.filter((g) => !found.includes(g) && els.has(g));
+      const missing = ids.filter((g) => !els.has(g));
+      if (viewer3d) viewer3d.highlight(found, { zoom });
+      viewer3d && viewer3d.select(null);
+      body.innerHTML = `<p class="eyebrow">Capítulo</p><h2 class="m3d-h">${esc(c.title)}</h2>
+        <p><span class="badge ${c.status === "aprovado" ? "m-exp" : "m-miss"}">${esc(c.status)}</span> ${c.edited ? `<span class="badge m-rule">adaptado pelo usuário</span>` : ""}</p>
+        <p class="small"><b>${found.length}</b> elemento(s) destacado(s) no 3D${noShape.length ? ` · ${noShape.length} sem forma 3D no IFC` : ""}${missing.length ? ` · <b>${missing.length} não encontrado(s) nesta versão</b>` : ""}.</p>
+        <div class="text small m3d-text">${esc(c.text) || "<i>(sem texto)</i>"}</div>
+        ${mem ? `<p><a class="btn sm" href="#/memorial/${mem.id}?cap=${c.id}">${icon("file")}Abrir no editor do memorial</a></p>` : ""}
+        <details class="ch-sec" open><summary>Elementos do capítulo (${ids.length})</summary><ul class="plain m3d-els">
+          ${ids.map((g) => { const e = els.get(g); return `<li><button type="button" class="linkish" data-gid="${esc(g)}" ${e ? "" : "disabled"}>${esc(e ? (e.name || "(sem nome)") : g)}</button>
+            <span class="muted small">${esc(e ? e.ifc_class : "não encontrado nesta versão")}${e && !(viewer3d && viewer3d.has(g)) ? " · sem forma 3D" : ""}</span></li>`; }).join("")}</ul></details>`;
+    }
+
+    async function showElement(gid, zoom = false) {
+      const e = els.get(gid);
+      if (!e) return;
+      viewer3d && viewer3d.select(gid, { zoom });
+      body.innerHTML = `<p class="muted small">Carregando a ficha…</p>`;
+      let d;
+      try { d = await API.get(`/api/ifc-elements/${e.id}`); } catch (err) { body.innerHTML = `<div class="notice err">${icon("alert")}<div>${esc(err.message)}</div></div>`; return; }
+      const cs = chOf(gid);
+      body.innerHTML = `<p class="eyebrow">${esc(d.ifc_class)}</p><h2 class="m3d-h">${esc(d.name || "(sem nome)")}</h2>
+        <div class="drawer-sec"><h3>Descrito no memorial</h3>${mem ? (cs.length ? `<ul class="plain">${cs.map((c) => `<li><button type="button" class="linkish" data-goch="${c.id}">${esc(c.title)}</button>
+          <span class="muted small">· ${esc(c.status)}</span></li>`).join("")}</ul>` : `<p class="muted small">Nenhum capítulo usa este elemento (veja as pendências do memorial).</p>`) : `<p class="muted small">Sem memorial para este modelo.</p>`}</div>
+        ${elementSheet(d)}`;
+    }
+
+    view.addEventListener("click", (ev) => {
+      const t = ev.target.closest("[data-ch],[data-gid],[data-goch],[data-toggle],[data-v]");
+      if (!t || t.tagName === "SELECT" || t.tagName === "INPUT") return;
+      if (t.dataset.ch) showChapter(chapters.find((c) => String(c.id) === t.dataset.ch));
+      else if (t.dataset.gid) showElement(t.dataset.gid, true);
+      else if (t.dataset.goch) showChapter(chapters.find((c) => String(c.id) === t.dataset.goch));
+      else if (t.dataset.toggle) $(`#${t.dataset.toggle}`).classList.toggle("collapsed");
+      else if (t.dataset.v === "all") { activeCh = null; setActiveBtn(); $("[data-v=storey]").value = ""; $("[data-v=disc]").value = ""; viewer3d && (viewer3d.highlight(null, { zoom: false }), viewer3d.select(null), viewer3d.fit()); body.innerHTML = `<p class="muted small">Selecione um capítulo ou clique num elemento do modelo.</p>`; }
+      else if (t.dataset.v === "fit") viewer3d && viewer3d.fit();
+    });
+    const filter = () => {
+      const st = $("[data-v=storey]").value, di = $("[data-v=disc]").value;
+      activeCh = null; setActiveBtn();
+      if (!viewer3d) return;
+      if (!st && !di) { viewer3d.highlight(null); return; }
+      viewer3d.highlight(elist.items.filter((e) => (!st || e.storey === st) && (!di || e.discipline === di)).map((e) => e.global_id).filter((g) => viewer3d.has(g)));
+    };
+    $("[data-v=storey]").addEventListener("change", filter);
+    $("[data-v=disc]").addEventListener("change", filter);
+    $("[data-v=cam]").addEventListener("change", (ev) => viewer3d && viewer3d.view(ev.target.value));
+    $("[data-v=spaces]").addEventListener("change", (ev) => viewer3d && viewer3d.setSpaces(ev.target.checked));
+
+    // carrega o IFC original (o mesmo arquivo guardado no projeto) e desenha no navegador
+    try {
+      const url = API.demo ? Demo.fileUrl(`/api/projects/${model.project_id}/files/${model.file_id}/original`)
+        : `${API.base}/api/projects/${model.project_id}/files/${model.file_id}/original`;
+      const [mod, resp] = await Promise.all([import("./viewer3d.js"), fetch(url, { headers: API.headers() })]);
+      if (!resp.ok) throw new Error(`não foi possível baixar o IFC (erro ${resp.status})`);
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      if (routeSeq !== seq) return;
+      dispose3d();
+      viewer3d = await mod.createViewer($("#m3dCanvas"), { onPick: (g) => (g ? showElement(g) : (viewer3d.select(null))) });
+      const st = await viewer3d.load(bytes);
+      if (routeSeq !== seq) { dispose3d(); return; }
+      $("#m3dLoad").remove();
+      window.__bim3d = { stats: st, viewer: viewer3d }; // usado nos testes automáticos
+      const want = r.params.get("cap");
+      const c = want && chapters.find((x) => String(x.id) === want);
+      if (c) showChapter(c);
+      else if (r.params.get("el")) showElement(r.params.get("el"), true);
+    } catch (err) {
+      const l = $("#m3dLoad");
+      if (l) l.innerHTML = `<div class="notice err">${icon("alert")}<div><b>Não foi possível mostrar o 3D:</b> ${esc(err.message)}. Os capítulos e as fichas continuam disponíveis.</div></div>`;
+    }
+  };
+
+  function chapterCard(c, n, m = {}) {
     const approved = c.status === "aprovado";
     const tables = (c.tables || []).filter((t) => t.rows && t.rows.length).map((t) => `
       <div class="table-wrap"><p class="small"><b>${esc(t.title)}</b> <span class="muted">(quadro gerado do IFC; exportado no Word)</span></p>
@@ -1100,7 +1278,8 @@
       <textarea data-text ${API.demo ? "readonly" : ""} rows="${Math.min(22, Math.max(4, Math.ceil((c.text || "").length / 95) + (c.text || "").split("\n").length))}" placeholder="Sem texto. Redija aqui ou insira uma sugestão da biblioteca abaixo." aria-label="Texto do capítulo ${esc(c.title)}">${esc(c.text)}</textarea>
       <div class="actions"><button class="btn sm" data-act="save" disabled>${icon("check")}Salvar texto</button>
         <button class="btn sm ${approved ? "" : "primary"}" data-act="approve">${icon(approved ? "restore" : "check")}${approved ? "Reabrir para revisão" : "Aprovar capítulo"}</button>
-        <button class="btn sm" data-act="hist">${icon("restore")}Histórico</button></div>
+        <button class="btn sm" data-act="hist">${icon("restore")}Histórico</button>
+        ${m.model_id && (c.element_ids || []).length ? `<a class="btn sm" href="#/modelo3d/${m.model_id}?memorial=${m.id}&cap=${c.id}" title="Destacar no modelo 3D os elementos de onde este capítulo saiu">${icon("layers")}Ver no 3D (${c.element_ids.length})</a>` : ""}</div>
       ${tables}
       ${c.pending && c.pending.length ? `<div class="notice"><span>${icon("alert")}</span><div><b>Pendências (informação não encontrada no IFC):</b><ul class="plain">${c.pending.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div></div>` : ""}
       ${c.facts && c.facts.length ? `<details class="ch-sec"><summary>Dados do IFC usados (${c.facts.length})</summary>

@@ -206,3 +206,22 @@ def test_api(project_with_model):
         assert c.post(f"/api/memorial-chapters/{cid}/insert-reference", params={"chunk_id": 999}).status_code == 404
         assert c.get("/api/memorials/999").status_code == 404
         assert c.delete(f"/api/memorials/{m['id']}").status_code == 204
+
+
+def test_chapters_link_to_ifc_global_ids(project_with_model):
+    """Rastreabilidade memorial <-> 3D: cada capítulo guarda os GlobalIds dos elementos de onde saiu."""
+    m = msvc.create_memorial(project_with_model["id"])
+    model = psvc.list_models(project_with_model["id"])[0]
+    els = {e["global_id"]: e for e in psvc.list_elements(model["id"], limit=10000)["items"]}
+    esq = _ch(m, "esquadrias")
+    doors_windows = {g for g, e in els.items() if e["ifc_class"] in ("IfcDoor", "IfcWindow")}
+    assert doors_windows and set(esq["element_ids"]) == doors_windows   # todos, e só eles
+    assert all(set(f["global_ids"]) <= set(esq["element_ids"]) for f in esq["facts"])
+    assert sum(len(f["global_ids"]) for f in esq["facts"]) >= len(doors_windows)  # sem cortar a lista
+    cob = next((c for c in m["chapters"] if c["key"] == "cobertura"), None)
+    if cob:  # consultar a estrutura metálica NÃO vincula seus elementos à cobertura
+        assert all(els[g]["discipline"] != "Estrutura metálica" for g in cob["element_ids"])
+    assert _ch(m, "apresentacao").get("element_ids", []) == []
+    # regerar mantém os vínculos
+    r = msvc.regenerate_chapter(esq["id"])
+    assert set(r["element_ids"]) == doors_windows

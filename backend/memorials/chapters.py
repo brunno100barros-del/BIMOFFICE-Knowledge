@@ -49,9 +49,14 @@ class Ctx:
         self.els = elements
         self.src = source_label
         self.storey_rank = {n: i for i, n in enumerate(storey_order or [])}
+        self.used: dict[str, None] = {}  # GlobalIds dos elementos usados pelo capítulo em construção
 
     def where(self, pred) -> list[dict]:
-        return [e for e in self.els if pred(e)]
+        out = [e for e in self.els if pred(e)]
+        for e in out:
+            if e.get("global_id"):
+                self.used[e["global_id"]] = None
+        return out
 
 
 def q_first(e: dict, names, methods=("explicito", "atributo", "geometrico")) -> dict | None:
@@ -89,7 +94,7 @@ def method_txt(methods: set) -> str:
 
 def fact(desc: str, value: str, els: list[dict], ctx: Ctx, methods: set | None = None) -> dict:
     return {"descricao": desc, "valor": value, "origem": ctx.src, "metodo": method_txt(methods or set()),
-            "elementos": len(els), "global_ids": [e.get("global_id") for e in els[:8]]}
+            "elementos": len(els), "global_ids": [e.get("global_id") for e in els if e.get("global_id")]}
 
 
 def missing_summary(els: list[dict], label: str) -> list[str]:
@@ -349,7 +354,7 @@ def ch_cobertura(ctx: Ctx) -> dict | None:
     paras += _describe_groups(_group([e for e in els if e["ifc_class"] != "IfcRoof"], lambda e: ", ".join(mats(e)) or "material não informado"),
                               ctx, facts, pending, lambda k, g: f"Telhamento em {k} ({storeys(g)})",
                               [({"NetArea", "GrossArea", "Área de projeção (malha 3D)"}, "área total", "m²")])
-    if ctx.where(lambda e: e.get("discipline") == "Estrutura metálica"):
+    if any(e.get("discipline") == "Estrutura metálica" for e in ctx.els):  # só consulta: não vincula ao capítulo
         paras.append("A estrutura de apoio da cobertura está descrita no capítulo de estrutura metálica.")
     pending.append("Inclinação, calhas, rufos e condutores não constam no IFC.")
     return {"paragraphs": paras, "facts": facts, "pending": pending, "tables": [],
@@ -452,16 +457,17 @@ def build_all(elements: list[dict], project: dict, model: dict | None) -> list[d
     for key, title, query in COMPLEMENTARY:
         found[key] = _complementary(key, title, query)
     for key, title, fn in BUILDERS:
+        ctx.used = {}
         r = fn(ctx)
         if r:
-            found[key] = {"key": key, "title": title, **r}
+            found[key] = {"key": key, "title": title, **r, "element_ids": list(ctx.used)}
     out = [found[k] for k in ORDER if k in found]
     out.append(ch_pendencias(elements, out, model))
     return out
 
 
 def _complementary(key, title, query) -> dict:
-    return {"key": key, "title": title, "paragraphs": [], "facts": [], "tables": [], "query": query,
+    return {"key": key, "title": title, "paragraphs": [], "facts": [], "tables": [], "query": query, "element_ids": [],
             "pending": ["Capítulo sem dados no modelo IFC: redija o texto ou insira um trecho de referência da biblioteca."]}
 
 
@@ -480,4 +486,4 @@ def ch_pendencias(elements: list[dict], chapters: list[dict], model: dict | None
                      + (f" — sugestão pelo nome: {sug['discipline']} (confirmar)" if sug else "")])
     return {"key": "pendencias", "title": "Pendências de informação", "paragraphs": paras, "facts": [],
             "pending": [], "tables": [{"title": "Informações a confirmar", "columns": ["Capítulo", "Pendência"], "rows": rows}],
-            "query": ""}
+            "query": "", "element_ids": [e["global_id"] for e in pend if e.get("global_id")]}
