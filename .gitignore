@@ -13,3 +13,8 @@ data/logs/
 # Memoriais reais para teste local (nunca vão para o GitHub)
 amostras/*
 !amostras/LEIA-ME.txt
+
+# Docker / nuvem
+.env
+docker/certs/*
+!docker/certs/.gitkeep

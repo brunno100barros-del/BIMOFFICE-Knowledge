@@ -162,3 +162,12 @@ def test_frontend_is_served_and_has_no_secrets(client):
     cfg = client.get("/config.js").text
     assert "apiBase: null" in cfg  # nenhum endereço/segredo fixo no arquivo público
     assert client.get("/api/health").json()["status"] == "ok"  # API continua acima da interface
+
+
+def test_readiness_checks_database_and_storage(client, monkeypatch):
+    r = client.get("/api/health/ready")
+    assert r.status_code == 200 and r.json()["checks"]["database"]["ok"] and r.json()["checks"]["storage"]["ok"]
+    from backend import config
+    monkeypatch.setattr(config, "STORAGE", "s3")
+    monkeypatch.setattr(config, "S3_BUCKET", "")       # armazenamento mal configurado -> 503
+    assert client.get("/api/health/ready").status_code == 503

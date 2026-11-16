@@ -106,6 +106,11 @@ class S3Storage:
         self.prefix = config.S3_PREFIX
         self.client = boto3.client("s3", endpoint_url=config.S3_ENDPOINT_URL or None,
                                    region_name=config.S3_REGION or None)
+        if config.S3_CREATE_BUCKET:  # simulador local (docker-compose, perfil s3-local)
+            try:
+                self.client.head_bucket(Bucket=self.bucket)
+            except Exception:
+                self.client.create_bucket(Bucket=self.bucket)
 
     def _k(self, key: str) -> str:
         if ".." in key or key.startswith("/"):

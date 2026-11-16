@@ -36,7 +36,9 @@ def ensure_dirs() -> None:
 # Modelo local de embeddings (roda no próprio computador; nenhum texto sai da máquina).
 EMBEDDING_MODEL = os.environ.get("BIMOFFICE_EMBEDDING_MODEL", "intfloat/multilingual-e5-base")
 # Pasta onde o modelo baixado fica guardado (dentro de data/, fora do Git).
-MODELS_DIR = EMBEDDINGS_DIR / "modelos"
+MODELS_DIR = Path(os.environ["BIMOFFICE_MODELS_DIR"]) if os.environ.get("BIMOFFICE_MODELS_DIR") else EMBEDDINGS_DIR / "modelos"
+# depois de uma falha ao carregar o modelo, espera este tempo antes de tentar de novo (não trava as pesquisas)
+EMBEDDING_RETRY_SECONDS = int(os.environ.get("BIMOFFICE_EMBEDDING_RETRY_SECONDS", "300"))
 EMBEDDING_BATCH_SIZE = 16
 # Gerar os vetores logo ao importar/reindexar (se o modelo estiver disponível).
 EMBED_ON_IMPORT = os.environ.get("BIMOFFICE_EMBED_ON_IMPORT", "1") == "1"
@@ -76,6 +78,7 @@ S3_BUCKET = os.environ.get("BIMOFFICE_S3_BUCKET", "")
 S3_PREFIX = os.environ.get("BIMOFFICE_S3_PREFIX", "bimoffice/")
 S3_ENDPOINT_URL = os.environ.get("BIMOFFICE_S3_ENDPOINT_URL", "")   # ex.: https://storage.googleapis.com
 S3_REGION = os.environ.get("BIMOFFICE_S3_REGION", "")
+S3_CREATE_BUCKET = os.environ.get("BIMOFFICE_S3_CREATE_BUCKET", "0") == "1"   # só para testes locais
 
 # ------------------------------------------------------------------ nuvem: login e permissões
 # off (padrão, uso local no próprio computador) · on (nuvem: login obrigatório, equipes por projeto)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -40,11 +41,14 @@ class SentenceTransformerProvider(EmbeddingProvider):
         self.name = model_name or config.EMBEDDING_MODEL
         self.device = device
         self._model = None
+        self._failed: tuple[float, str] | None = None  # (quando, motivo) da última falha ao carregar
         self._lock = threading.Lock()
         self._is_e5 = "e5" in self.name.lower()
 
     def _load(self):
         with self._lock:
+            if self._model is None and self._failed and time.monotonic() - self._failed[0] < config.EMBEDDING_RETRY_SECONDS:
+                raise EmbeddingUnavailable(self._failed[1])  # falha recente: não tenta de novo agora
             if self._model is None:
                 try:
                     from sentence_transformers import SentenceTransformer
@@ -63,9 +67,9 @@ class SentenceTransformerProvider(EmbeddingProvider):
                         log.info("Baixando modelo de embeddings %s (apenas na 1ª vez)", self.name)
                         self._model = SentenceTransformer(self.name, **kw)
                     except Exception as e:
-                        raise EmbeddingUnavailable(
-                            f"Não foi possível carregar o modelo {self.name}: {e}"
-                        ) from e
+                        msg = f"Não foi possível carregar o modelo {self.name}: {type(e).__name__}"
+                        self._failed = (time.monotonic(), msg)
+                        raise EmbeddingUnavailable(msg) from e
         return self._model
 
     def _encode(self, texts: list[str]) -> np.ndarray:

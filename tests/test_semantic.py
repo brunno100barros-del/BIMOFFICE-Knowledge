@@ -139,3 +139,22 @@ def test_relative_relevance_reflects_agreement(tmp_path):
 def test_stopwords_only_query_still_works(tmp_path):
     _imp(tmp_path, "a.docx")
     assert isinstance(svc.search_text("de da do", match_any=True), list)
+
+
+def test_model_load_failure_is_remembered(monkeypatch):
+    """Sem o modelo (ex.: servidor sem internet), a 1ª falha é lembrada e as próximas pesquisas não travam."""
+    import time as _t
+    from backend.semantic_search.providers import SentenceTransformerProvider
+    p = SentenceTransformerProvider("modelo/inexistente-para-teste")
+    calls = []
+    import sentence_transformers
+    monkeypatch.setattr(sentence_transformers, "SentenceTransformer",
+                        lambda *a, **k: calls.append(1) or (_ for _ in ()).throw(OSError("sem rede")), raising=False)
+    for _ in range(5):
+        with pytest.raises(EmbeddingUnavailable):
+            p.embed_query("x")
+    assert len(calls) == 2            # 1ª tentativa local + download; depois falha rápida, sem tentar de novo
+    t0 = _t.monotonic()
+    with pytest.raises(EmbeddingUnavailable):
+        p.embed_query("y")
+    assert _t.monotonic() - t0 < 0.1

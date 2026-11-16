@@ -1,0 +1,50 @@
+# Testes da arquitetura de nuvem: a MESMA suíte em PostgreSQL real (+ S3 simulado) e a imagem Docker.
+name: Testes da nuvem (PostgreSQL, S3, Docker)
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: {POSTGRES_PASSWORD: teste, POSTGRES_DB: bimoffice_test}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    strategy:
+      fail-fast: false
+      matrix:
+        storage: [local, s3]
+    env:
+      BIMOFFICE_TEST_DATABASE_URL: postgresql://postgres:teste@localhost:5432/bimoffice_test
+      BIMOFFICE_TEST_STORAGE: ${{ matrix.storage }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip}
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client-16 || sudo apt-get install -y postgresql-client
+      - run: pip install -r requirements.txt
+      - name: Suíte completa no PostgreSQL (${{ matrix.storage }})
+        run: python -m pytest -q -rs
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir a imagem (sem IA, para ser rápido)
+        run: docker build --build-arg WITH_ML=0 -t bimoffice-knowledge .
+      - name: Subir o container e conferir se fica pronto
+        run: |
+          docker run -d --name app -p 8000:8000 bimoffice-knowledge
+          for i in $(seq 40); do curl -sf localhost:8000/api/health/ready && exit 0; sleep 2; done
+          docker logs app; exit 1
+      - name: pg_dump disponível na imagem (backup)
+        run: docker exec app pg_dump --version

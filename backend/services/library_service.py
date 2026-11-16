@@ -101,6 +101,7 @@ def backup_database() -> Path:
         dest = config.BACKUPS_DIR / f"bimoffice_{datetime.now():%Y%m%d_%H%M%S_%f}.dump"
         if not shutil.which("pg_dump"):
             raise LibraryError("pg_dump não está instalado no servidor: o backup do PostgreSQL é feito pelo serviço de banco.")
+        dest.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["pg_dump", "--format=custom", "--file", str(dest), config.DATABASE_URL], check=True,
                        capture_output=True, timeout=600)
         log.info("Backup criado: %s", dest)
@@ -115,6 +116,17 @@ def backup_database() -> Path:
         src.close()
     log.info("Backup criado: %s", dest)
     return dest
+
+
+def _safety_backup() -> None:
+    """Backup antes de excluir/reindexar. No PostgreSQL gerenciado sem pg_dump, o backup é do provedor:
+    registra aviso e segue (a exclusão é lógica, nada é apagado de fato)."""
+    try:
+        backup_database()
+    except LibraryError as e:
+        if dialect() != "postgres":
+            raise
+        log.warning("Backup prévio não realizado: %s", e)
 
 
 # ------------------------------------------------------------------ indexação
@@ -283,7 +295,7 @@ def update_metadata(doc_id: int, meta: dict) -> dict:
 def delete_document(doc_id: int) -> None:
     """Exclusão lógica: o arquivo e os dados permanecem; o documento sai das listas/buscas."""
     get_document(doc_id)
-    backup_database()
+    _safety_backup()
     with get_conn() as conn:
         conn.execute("UPDATE documents SET deleted_at=datetime('now') WHERE id=?", (doc_id,))
         conn.execute("DELETE FROM chunks WHERE document_id=?", (doc_id,))  # sai da busca (FTS via trigger)
@@ -312,7 +324,7 @@ def reindex_document(doc_id: int) -> dict:
     key = _stored_key(doc_id)
     if not get_storage().exists(key):
         raise LibraryError("O arquivo original não foi encontrado em data/documents.")
-    backup_database()
+    _safety_backup()
     with get_conn() as conn:
         with get_storage().local_path(key) as local:
             _index_file(conn, doc_id, local)

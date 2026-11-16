@@ -1,0 +1,56 @@
+# Ambiente completo (igual ao da nuvem) no seu computador ou num servidor:
+#   cp .env.example .env   (e preencha as senhas)
+#   docker compose up -d --build
+#   Interface: http://localhost:8000
+# Serviços: db (PostgreSQL 16) · api (FastAPI) · worker (processamento IFC) · s3 (SÓ PARA TESTES; na nuvem
+# use o armazenamento de objetos do provedor e apague este serviço).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: bimoffice
+      POSTGRES_USER: bimoffice
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bimoffice -d bimoffice"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  s3:   # simulador de S3 para testes locais (moto). NÃO usar em produção.
+    image: motoserver/moto:latest
+    profiles: ["s3-local"]
+    restart: unless-stopped
+
+  api:
+    build: .
+    image: bimoffice-knowledge
+    env_file: .env
+    environment: &appenv
+      BIMOFFICE_DATABASE_URL: postgresql://bimoffice:${DB_PASSWORD}@db:5432/bimoffice
+      BIMOFFICE_JOB_WORKER: "0"           # processamento fica no serviço worker
+    ports: ["8000:8000"]
+    volumes: [appdata:/data]             # cache do modelo de IA, backups e (se STORAGE=local) arquivos
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+
+  worker:
+    image: bimoffice-knowledge
+    command: ["python", "-m", "backend.worker"]
+    env_file: .env
+    environment: *appenv
+    volumes: [appdata:/data]
+    depends_on:
+      db: {condition: service_healthy}
+      api: {condition: service_started}
+    healthcheck: {disable: true}
+    deploy:
+      resources:
+        limits: {memory: 4g, cpus: "2"}  # limite de memória/CPU do processamento IFC
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  appdata:

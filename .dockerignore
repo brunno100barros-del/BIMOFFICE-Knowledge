@@ -1,0 +1,11 @@
+.git
+.venv
+data
+amostras
+**/__pycache__
+.pytest_cache
+tests
+docs/img
+exemplos/saida
+frontend/demo
+*.bundle

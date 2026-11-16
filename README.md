@@ -103,6 +103,13 @@ python -m pytest -q
 - PDF: tabelas viram texto corrido; títulos e parágrafos são reconstruídos por heurística.
 - Destaque de termos na pesquisa marca prefixos ("forro" em "Forros").
 
+## Nuvem (v0.6)
+PostgreSQL (produção) ou SQLite (local), arquivos em S3 compatível ou disco, worker separado
+(`python -m backend.worker`), login com papéis e equipes por projeto, auditoria, Docker
+(`docker compose up -d --build`), `/api/health/ready`, backup/restauração/migração
+(`python -m backend.backup`). Comparação de hospedagem, implantação e procedimentos:
+[docs/CLOUD.md](docs/CLOUD.md). Nada foi contratado.
+
 ## Publicação e arquitetura online
 Veja [docs/PUBLICACAO.md](docs/PUBLICACAO.md): GitHub Pages (interface), backend separado,
 variáveis de ambiente, senha da API, CORS e o plano do Google Drive.

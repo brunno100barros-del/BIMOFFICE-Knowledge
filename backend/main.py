@@ -22,7 +22,7 @@ from backend.database.db import init_db
 from backend.routes import auth as auth_routes, library, memorials, projects, search
 from backend.semantic_search.providers import get_provider
 
-PUBLIC_PATHS = {"/api/health", "/api/config", "/api/auth/login"}
+PUBLIC_PATHS = {"/api/health", "/api/health/ready", "/api/config", "/api/auth/login"}
 
 
 def _setup_logging() -> None:
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     jobs.stop_worker()
 
 
-app = FastAPI(title="BIMOFFICE Knowledge", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="BIMOFFICE Knowledge", version="0.6.0", lifespan=lifespan)
 
 
 class AccessMiddleware(BaseHTTPMiddleware):
@@ -121,6 +121,26 @@ def _ifc_status() -> dict:
                 "schemas": ["IFC2X3", "IFC4", "IFC4X3"], "max_mb": config.MAX_IFC_BYTES // (1024 * 1024)}
     except Exception as e:  # biblioteca ausente: o resto do sistema continua funcionando
         return {"available": False, "reason": f"IfcOpenShell não instalado ({type(e).__name__})."}
+
+
+@app.get("/api/health/ready")
+def ready():
+    """Pronto para atender? Confere banco e armazenamento (usado por Docker e pelo serviço de nuvem)."""
+    from backend.database.db import dialect, get_conn
+    from backend.storage import get_storage
+    checks, ok = {}, True
+    try:
+        with get_conn() as conn:
+            conn.execute("SELECT 1").fetchone()
+        checks["database"] = {"ok": True, "dialect": dialect()}
+    except Exception as e:
+        ok, checks["database"] = False, {"ok": False, "error": type(e).__name__}
+    try:
+        checks["storage"] = {"ok": True, **get_storage().check()}
+    except Exception as e:
+        ok, checks["storage"] = False, {"ok": False, "error": type(e).__name__}
+    return JSONResponse({"status": "ok" if ok else "indisponível", "version": app.version, "checks": checks},
+                        status_code=200 if ok else 503)
 
 
 @app.get("/api/config")

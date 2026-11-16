@@ -29,7 +29,7 @@ Uma etapa por vez, testando antes de avançar. Ao fim de cada etapa informar: o 
 implementado, arquivos criados/modificados, como testar, limitações. Rodar `python -m pytest -q`
 antes de cada commit; commits pequenos e em português.
 
-## Estado atual (v0.5)
+## Estado atual (v0.6)
 - Backups: branches `backup/pre-ifc-2026-11-16` (antes do IFC), `backup/pre-evolucao-2026-11-13`, `backup/main-2026-11-13`.
 - v0.3 intacta: biblioteca DOCX/PDF, pesquisa híbrida E5+FTS5, interface Liquid Glass, GitHub Pages.
 - **Fase 0 (IFC) concluída:** IfcOpenShell 0.9.0.post1 (LGPL), Python 3.13; Windows testado de verdade no
@@ -54,6 +54,13 @@ antes de cada commit; commits pequenos e em português.
 - **Demonstração estática (Pages):** `frontend/demo/` = respostas REAIS da API para o exemplo, geradas por
   `scripts/exemplo/gerar_demo_estatico.py` (rodar de novo quando API/exemplo mudarem); `Demo` em app.js responde
   só GET, bloqueia mudanças e NÃO simula pesquisa. Teste: `tests/test_demo_static.py`.
+- **v0.6 Nuvem — Etapa 1 concluída e testada** (docs/CLOUD.md): PostgreSQL opcional (`backend/database/db.py`
+  traduz o SQL; migrações em `backend/database/migrations/`), armazenamento S3 (`backend/storage.py`), worker separado
+  (`backend/worker.py`, fila PG com SKIP LOCKED), login/papéis/equipes/auditoria (`backend/auth.py`, `BIMOFFICE_AUTH=on`),
+  Docker + compose, `/api/health/ready`, backup/restauração/migração (`backend/backup.py`), CI `testes-nuvem.yml`.
+  Testes em 4 modos: `BIMOFFICE_TEST_DATABASE_URL=postgresql://...` e/ou `BIMOFFICE_TEST_STORAGE=s3`.
+  Próximas etapas do pedido de nuvem: visualizador 3D + ficha, vínculos memorial↔GlobalId/versão + diff, modo
+  Memorial 3D, barra de navegação superior, Gemini e Drive. Hospedagem: aguardando decisão/aprovação de custos.
 - **Pendente / depende do usuário:** validar o exemplo; memoriais e IFCs reais; chave Gemini + autorização para enviar
   dados ao Google (Fase 3); credenciais OAuth do Drive; servidor do backend online.
 
