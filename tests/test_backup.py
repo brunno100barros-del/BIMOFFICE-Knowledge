@@ -104,3 +104,12 @@ def test_migrate_local_sqlite_to_postgres(tmp_path, monkeypatch):
     with get_storage().local_path(psvc.file_key(f["id"])) as local:
         assert local.read_bytes() == ifc_bytes
     assert psvc.create_project("Novo na nuvem")["id"] > p["id"]        # sequência ajustada
+
+
+def test_restore_ignores_only_harmless_version_settings():
+    """pg_dump mais novo que o servidor (ex.: 17 -> 16) gera 'SET transaction_timeout': ignorado; o resto não."""
+    ok = ('pg_restore: error: could not execute query: ERROR:  unrecognized configuration parameter '
+          '"transaction_timeout"\nCommand was: SET transaction_timeout = 0;\n')
+    assert backup._restore_errors(ok) == []
+    bad = ok + 'pg_restore: error: could not execute query: ERROR:  relation "chunks" does not exist\n'
+    assert len(backup._restore_errors(bad)) == 1

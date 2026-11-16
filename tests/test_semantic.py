@@ -147,9 +147,11 @@ def test_model_load_failure_is_remembered(monkeypatch):
     from backend.semantic_search.providers import SentenceTransformerProvider
     p = SentenceTransformerProvider("modelo/inexistente-para-teste")
     calls = []
-    import sentence_transformers
-    monkeypatch.setattr(sentence_transformers, "SentenceTransformer",
-                        lambda *a, **k: calls.append(1) or (_ for _ in ()).throw(OSError("sem rede")), raising=False)
+    import sys
+    import types
+    fake = types.ModuleType("sentence_transformers")  # funciona com ou sem o pacote instalado
+    fake.SentenceTransformer = lambda *a, **k: calls.append(1) or (_ for _ in ()).throw(OSError("sem rede"))
+    monkeypatch.setitem(sys.modules, "sentence_transformers", fake)
     for _ in range(5):
         with pytest.raises(EmbeddingUnavailable):
             p.embed_query("x")

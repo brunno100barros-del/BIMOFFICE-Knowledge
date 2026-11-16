@@ -118,8 +118,9 @@ def restore(src: Path) -> dict:
             c.execute("CREATE SCHEMA public")
         r = subprocess.run(["pg_restore", "--no-owner", "--dbname", config.DATABASE_URL, str(src / "banco.dump")],
                            capture_output=True, text=True, timeout=3600)
-        if r.returncode != 0 and "ERROR" in r.stderr:
-            raise BackupError(f"pg_restore falhou: {r.stderr[-500:]}")
+        bad = _restore_errors(r.stderr) if r.returncode != 0 else []
+        if bad:
+            raise BackupError(f"pg_restore falhou: {' | '.join(bad)[-500:]}")
     else:
         config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src / "banco.db", config.DB_PATH)
@@ -129,6 +130,16 @@ def restore(src: Path) -> dict:
     if counts != man["contagens"]:
         raise BackupError(f"Contagens diferentes após restaurar: {counts} x {man['contagens']}")
     return {"restaurado": str(src), "contagens": counts, "arquivos": len(man["arquivos"])}
+
+
+# pg_dump mais novo que o servidor grava ajustes que o servidor antigo não conhece (ex.: pg_dump 17 -> PostgreSQL 16).
+# São só parâmetros da sessão de restauração, sem efeito nos dados; as contagens são conferidas depois.
+_HARMLESS = ('unrecognized configuration parameter "transaction_timeout"',)
+
+
+def _restore_errors(stderr: str) -> list[str]:
+    errs = [ln.strip() for ln in stderr.splitlines() if "ERROR:" in ln]
+    return [e for e in errs if not any(h in e for h in _HARMLESS)]
 
 
 def migrate_sqlite(sqlite_path: Path, data_dir: Path) -> dict:
