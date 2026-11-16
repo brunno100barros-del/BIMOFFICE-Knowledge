@@ -18,7 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from backend import config, jobs
 from backend.database.db import init_db
-from backend.routes import library, projects, search
+from backend.routes import library, memorials, projects, search
 from backend.semantic_search.providers import get_provider
 
 PUBLIC_PATHS = {"/api/health", "/api/config"}
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     jobs.stop_worker()
 
 
-app = FastAPI(title="BIMOFFICE Knowledge", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="BIMOFFICE Knowledge", version="0.5.0", lifespan=lifespan)
 
 
 class TokenAuthMiddleware(BaseHTTPMiddleware):
@@ -71,6 +71,7 @@ app.add_middleware(
     allow_origins=config.CORS_ORIGINS,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["Content-Disposition"],  # nome do arquivo DOCX exportado
     # permite a página do GitHub Pages (internet) chamar o backend no próprio PC (Chrome)
     allow_private_network=True,
 )
@@ -78,6 +79,7 @@ app.add_middleware(
 app.include_router(library.router)
 app.include_router(search.router)
 app.include_router(projects.router)
+app.include_router(memorials.router)
 
 
 @app.get("/api/health")

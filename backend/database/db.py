@@ -170,6 +170,45 @@ CREATE TABLE IF NOT EXISTS project_history (
     detail     TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS ix_phist_project ON project_history(project_id);
+
+-- ================================================================ MEMORIAL EM ELABORAÇÃO (v0.5)
+-- Separado da biblioteca: editar o memorial nunca altera documentos da biblioteca.
+CREATE TABLE IF NOT EXISTS memorials (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    model_id   INTEGER REFERENCES ifc_models(id) ON DELETE SET NULL,
+    title      TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS memorial_chapters (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    memorial_id    INTEGER NOT NULL REFERENCES memorials(id) ON DELETE CASCADE,
+    position       INTEGER NOT NULL,
+    key            TEXT NOT NULL,                  -- ex.: vedacoes; "custom" para capítulos criados pelo usuário
+    title          TEXT NOT NULL,
+    generated_text TEXT NOT NULL DEFAULT '',       -- texto ORIGINAL gerado a partir do IFC (não é editado)
+    text           TEXT NOT NULL DEFAULT '',       -- texto ATUAL (adaptado/revisado pelo usuário)
+    status         TEXT NOT NULL DEFAULT 'rascunho', -- rascunho | aprovado
+    facts          TEXT NOT NULL DEFAULT '[]',     -- dados do IFC usados (origem, método, GlobalIds)
+    pending        TEXT NOT NULL DEFAULT '[]',     -- informações ausentes
+    tables_json    TEXT NOT NULL DEFAULT '[]',     -- quadros (ambientes, esquadrias...)
+    suggestions    TEXT NOT NULL DEFAULT '[]',     -- trechos de referência sugeridos (NÃO inseridos)
+    inserted_refs  TEXT NOT NULL DEFAULT '[]',     -- trechos inseridos: texto ORIGINAL + origem
+    query          TEXT NOT NULL DEFAULT '',
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_mchap_memorial ON memorial_chapters(memorial_id);
+CREATE TABLE IF NOT EXISTS memorial_versions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    chapter_id INTEGER NOT NULL REFERENCES memorial_chapters(id) ON DELETE CASCADE,
+    at         TEXT NOT NULL DEFAULT (datetime('now')),
+    event      TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    text       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_mver_chapter ON memorial_versions(chapter_id);
 """
 
 
